@@ -4,6 +4,7 @@
 
 #include "ble/BleTelemetryService.h"
 #include "display/OledDisplay.h"
+#include "energy/EnergyAccumulator.h"
 #include "input/DebouncedButton.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
@@ -25,9 +26,11 @@ private:
     void updateBle(uint32_t nowMs);
     void updateSerial(uint32_t nowMs);
     void printDiagnostics() const;
+    void resetPhysicalSessionState();
 
     Ina228Sensor sensor_;
     TelemetryStore telemetry_;
+    EnergyAccumulator energy_;
     OledDisplay display_;
     BleTelemetryService ble_;
     WebDashboard web_;
@@ -39,4 +42,6 @@ private:
     uint32_t lastDisplayMs_ = 0;
     uint32_t lastBleMs_ = 0;
     uint32_t lastSerialMs_ = 0;
+    uint32_t measurementSequence_ = 0;
+    const char* resetReason_ = "unknown";
 };

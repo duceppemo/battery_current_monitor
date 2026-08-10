@@ -16,7 +16,7 @@ public:
         const TelemetryStore& store,
         bool bleConnected,
         uint8_t wifiClients,
-        uint32_t i2cErrors
+        uint32_t failedSamples
     );
 
     void setOn(bool on);

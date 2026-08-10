@@ -3,29 +3,39 @@
 #include <Arduino.h>
 #include <WebServer.h>
 
+#include "energy/EnergyAccumulator.h"
 #include "telemetry/TelemetryStore.h"
 
 class WebDashboard
 {
 public:
-    void begin(TelemetryStore& store);
+    void begin(TelemetryStore& store, const EnergyTotals& energyTotals);
     void update();
+    bool consumeDisplayToggleRequested();
+    bool consumeSessionResetRequested();
 
     void setRuntimeStatus(
         bool bleConnected,
+        bool bleAdvertising,
         bool displayOn,
-        uint32_t goodReads,
-        uint32_t i2cErrors
+        const char* resetReason,
+        uint32_t successfulSamples,
+        uint32_t failedSamples
     );
 
     uint8_t clientCount() const;
     bool running() const { return running_; }
+    bool accessPointReady() const { return accessPointReady_; }
 
 private:
     void handleRoot();
     void handleTelemetry();
     void handleResetExtrema();
+    void handleResetSession();
+    void handleToggleDisplay();
     void handleNotFound();
+    bool startAccessPoint();
+    void maintainAccessPoint(uint32_t nowMs);
 
     static void appendNullableFloat(
         String& json,
@@ -33,6 +43,7 @@ private:
         float value,
         uint8_t decimals
     );
+    static void appendUnsigned(String& json, uint32_t value);
 
     static void appendMetric(
         String& json,
@@ -45,10 +56,18 @@ private:
 
     WebServer server_{80};
     TelemetryStore* store_ = nullptr;
+    const EnergyTotals* energyTotals_ = nullptr;
+    String telemetryJson_;
 
     bool running_ = false;
     bool bleConnected_ = false;
+    bool bleAdvertising_ = false;
     bool displayOn_ = true;
-    uint32_t goodReads_ = 0;
-    uint32_t i2cErrors_ = 0;
+    const char* resetReason_ = "unknown";
+    bool accessPointReady_ = false;
+    uint32_t lastAccessPointCheckMs_ = 0;
+    bool displayToggleRequested_ = false;
+    bool sessionResetRequested_ = false;
+    uint32_t successfulSamples_ = 0;
+    uint32_t failedSamples_ = 0;
 };

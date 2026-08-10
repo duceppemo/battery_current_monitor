@@ -17,7 +17,7 @@ void TelemetryStore::updateExtrema()
         currentStats_.update(current_.current);
     }
 
-    if (current_.voltageOK && current_.shuntOK) {
+    if (current_.powerOK()) {
         powerStats_.update(current_.power);
     }
 

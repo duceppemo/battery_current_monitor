@@ -12,8 +12,14 @@ public:
     bool identify();
     bool read(Telemetry& telemetry);
 
-    uint32_t goodReads() const { return goodReads_; }
-    uint32_t failedReads() const { return failedReads_; }
+    // A sample is one polling pass across voltage, shunt voltage and die
+    // temperature. This is the health measure exposed to users.
+    uint32_t successfulSamples() const { return successfulSamples_; }
+    uint32_t failedSamples() const { return failedSamples_; }
+
+    // Register counters are retained for low-level serial diagnostics.
+    uint32_t successfulRegisterReads() const { return successfulRegisterReads_; }
+    uint32_t failedRegisterReads() const { return failedRegisterReads_; }
 
 private:
     static constexpr uint8_t REG_VSHUNT = 0x04;
@@ -36,6 +42,8 @@ private:
     static int32_t signExtend20(uint32_t value);
 
     TwoWire* wire_ = nullptr;
-    uint32_t goodReads_ = 0;
-    uint32_t failedReads_ = 0;
+    uint32_t successfulSamples_ = 0;
+    uint32_t failedSamples_ = 0;
+    uint32_t successfulRegisterReads_ = 0;
+    uint32_t failedRegisterReads_ = 0;
 };

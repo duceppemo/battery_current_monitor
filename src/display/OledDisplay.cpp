@@ -36,10 +36,22 @@ void OledDisplay::showStartup()
 
     oled_.clearBuffer();
     oled_.setFont(u8g2_font_6x12_tf);
-    oled_.drawStr(4, 12, "Battery Monitor Rev A");
-    oled_.drawHLine(4, 16, 120);
-    oled_.drawStr(4, 32, "INA228 + SSD1309");
-    oled_.drawStr(4, 48, "BLE + WiFi starting");
+
+    constexpr char TITLE[] = "Battery Monitor";
+    constexpr char REVISION[] = "Revision A";
+    constexpr char HARDWARE[] = "INA228 + SSD1309";
+    constexpr char STARTING[] = "BLE + WiFi starting";
+    constexpr int DISPLAY_WIDTH = 128;
+
+    auto drawCentered = [this](const char* text, int baseline) {
+        oled_.drawStr((DISPLAY_WIDTH - oled_.getStrWidth(text)) / 2, baseline, text);
+    };
+
+    drawCentered(TITLE, 12);
+    drawCentered(REVISION, 25);
+    oled_.drawHLine(4, 30, 120);
+    drawCentered(HARDWARE, 45);
+    drawCentered(STARTING, 60);
     oled_.sendBuffer();
 }
 
@@ -65,7 +77,7 @@ void OledDisplay::showMeasurements(
     const TelemetryStore& store,
     bool bleConnected,
     uint8_t wifiClients,
-    uint32_t i2cErrors)
+    uint32_t failedSamples)
 {
     if (!on_) {
         return;
@@ -97,7 +109,7 @@ void OledDisplay::showMeasurements(
     oled_.drawStr(RIGHT - oled_.getStrWidth(value), 28, value);
 
     oled_.drawStr(LEFT, 43, "P");
-    if (telemetry.voltageOK && telemetry.shuntOK) {
+    if (telemetry.powerOK()) {
         formatPower(value, sizeof(value), telemetry.power);
     } else {
         snprintf(value, sizeof(value), "ERROR");
@@ -117,7 +129,7 @@ void OledDisplay::showMeasurements(
         "B:%c W:%u E:%lu",
         bleConnected ? 'C' : '-',
         static_cast<unsigned>(wifiClients),
-        static_cast<unsigned long>(i2cErrors)
+        static_cast<unsigned long>(failedSamples)
     );
     oled_.drawStr(RIGHT - oled_.getStrWidth(value), 59, value);
 
