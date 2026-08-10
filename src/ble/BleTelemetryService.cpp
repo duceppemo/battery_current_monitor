@@ -14,6 +14,10 @@ namespace
         "7d9f0003-9c65-4d3d-bdd5-8f4c6b2e1000";
     constexpr char TEMPERATURE_UUID[] =
         "7d9f0004-9c65-4d3d-bdd5-8f4c6b2e1000";
+    constexpr char AMP_HOUR_UUID[] =
+        "7d9f0007-9c65-4d3d-bdd5-8f4c6b2e1000";
+    constexpr char WATT_HOUR_UUID[] =
+        "7d9f0008-9c65-4d3d-bdd5-8f4c6b2e1000";
     constexpr char STATUS_UUID[] =
         "7d9f0005-9c65-4d3d-bdd5-8f4c6b2e1000";
     constexpr char TELEMETRY_UUID[] =
@@ -28,6 +32,7 @@ BleTelemetryService::BleTelemetryService()
 void BleTelemetryService::ServerCallbacks::onConnect(BLEServer*)
 {
     owner_.connected_ = true;
+    owner_.advertising_ = false;
     Serial.println("BLE client connected.");
 }
 
@@ -71,6 +76,8 @@ void BleTelemetryService::begin()
     currentCharacteristic_ = createCharacteristic(service, CURRENT_UUID, "Current (A)");
     powerCharacteristic_ = createCharacteristic(service, POWER_UUID, "Power (W)");
     temperatureCharacteristic_ = createCharacteristic(service, TEMPERATURE_UUID, "INA228 Temperature (C)");
+    ampHourCharacteristic_ = createCharacteristic(service, AMP_HOUR_UUID, "Net Session Charge (Ah; positive = discharge)");
+    wattHourCharacteristic_ = createCharacteristic(service, WATT_HOUR_UUID, "Net Session Energy (Wh; positive = discharge)");
     statusCharacteristic_ = createCharacteristic(service, STATUS_UUID, "Monitor Status");
     telemetryCharacteristic_ = createCharacteristic(service, TELEMETRY_UUID, "Combined Telemetry");
 
@@ -78,16 +85,35 @@ void BleTelemetryService::begin()
     currentCharacteristic_->setValue("0.000000");
     powerCharacteristic_->setValue("0.000000");
     temperatureCharacteristic_->setValue("0.0");
+    ampHourCharacteristic_->setValue("0.000000");
+    wattHourCharacteristic_->setValue("0.000000");
     statusCharacteristic_->setValue("BOOT");
-    telemetryCharacteristic_->setValue("V=0;I=0;P=0;T=0;E=0");
+    telemetryCharacteristic_->setValue("V=0;I=0;P=0;T=0;Ah=0;Wh=0");
 
     service->start();
 
-    BLEAdvertising* advertising = BLEDevice::getAdvertising();
-    advertising->addServiceUUID(SERVICE_UUID);
-    advertising->setScanResponse(true);
-    BLEDevice::startAdvertising();
+    startAdvertising();
+}
 
+void BleTelemetryService::startAdvertising()
+{
+    BLEAdvertising* advertising = BLEDevice::getAdvertising();
+
+    // A 128-bit service UUID and device name do not both fit in the 31-byte
+    // primary advertising packet. Put the name in the primary packet so every
+    // scanner can identify the device; expose the custom service in the scan
+    // response.
+    BLEAdvertisementData advertisementData;
+    advertisementData.setName(Config::BLE_DEVICE_NAME);
+    advertising->setAdvertisementData(advertisementData);
+
+    BLEAdvertisementData scanResponseData;
+    scanResponseData.setCompleteServices(BLEUUID(SERVICE_UUID));
+    advertising->setScanResponseData(scanResponseData);
+    advertising->setScanResponse(true);
+
+    BLEDevice::startAdvertising();
+    advertising_ = true;
     Serial.printf("BLE advertising as \"%s\"\n", Config::BLE_DEVICE_NAME);
 }
 
@@ -104,7 +130,8 @@ void BleTelemetryService::updateCharacteristic(
 
 void BleTelemetryService::publish(
     const TelemetryStore& store,
-    uint32_t i2cErrors,
+    const EnergyTotals& energy,
+    uint32_t failedSamples,
     uint8_t wifiClients)
 {
     const Telemetry& telemetry = store.current();
@@ -124,7 +151,7 @@ void BleTelemetryService::publish(
     }
     updateCharacteristic(currentCharacteristic_, buffer, connected_);
 
-    if (telemetry.voltageOK && telemetry.shuntOK) {
+    if (telemetry.powerOK()) {
         snprintf(buffer, sizeof(buffer), "%.6f", telemetry.power);
     } else {
         snprintf(buffer, sizeof(buffer), "ERR");
@@ -138,12 +165,18 @@ void BleTelemetryService::publish(
     }
     updateCharacteristic(temperatureCharacteristic_, buffer, connected_);
 
+    snprintf(buffer, sizeof(buffer), "%.6f", energy.netAh);
+    updateCharacteristic(ampHourCharacteristic_, buffer, connected_);
+
+    snprintf(buffer, sizeof(buffer), "%.6f", energy.netWh);
+    updateCharacteristic(wattHourCharacteristic_, buffer, connected_);
+
     snprintf(
         buffer,
         sizeof(buffer),
-        "sensor=%s;i2c=%lu;wifi=%u",
+        "sensor=%s;failedSamples=%lu;wifi=%u",
         telemetry.sensorOK() ? "OK" : "ERR",
-        static_cast<unsigned long>(i2cErrors),
+        static_cast<unsigned long>(failedSamples),
         static_cast<unsigned>(wifiClients)
     );
     updateCharacteristic(statusCharacteristic_, buffer, connected_);
@@ -152,19 +185,21 @@ void BleTelemetryService::publish(
         snprintf(
             buffer,
             sizeof(buffer),
-            "V=%.3f;I=%.6f;P=%.6f;T=%.1f;E=%lu",
+            "V=%.3f;I=%.6f;P=%.6f;T=%.1f;Ah=%.6f;Wh=%.6f;F=%lu",
             telemetry.voltage,
             telemetry.current,
             telemetry.power,
             telemetry.temperature,
-            static_cast<unsigned long>(i2cErrors)
+            energy.netAh,
+            energy.netWh,
+            static_cast<unsigned long>(failedSamples)
         );
     } else {
         snprintf(
             buffer,
             sizeof(buffer),
-            "SENSOR_ERROR;E=%lu",
-            static_cast<unsigned long>(i2cErrors)
+            "SENSOR_ERROR;F=%lu",
+            static_cast<unsigned long>(failedSamples)
         );
     }
     updateCharacteristic(telemetryCharacteristic_, buffer, connected_);
@@ -174,9 +209,8 @@ void BleTelemetryService::maintain()
 {
     if (!connected_ && previouslyConnected_) {
         if (server_ != nullptr) {
-            server_->startAdvertising();
+            startAdvertising();
         }
-        Serial.println("BLE advertising restarted.");
         previouslyConnected_ = false;
     }
 

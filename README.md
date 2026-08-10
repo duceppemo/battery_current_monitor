@@ -12,7 +12,7 @@ INA228
 Ina228Sensor
   |
   v
-TelemetryStore  <---- physical min/max reset button
+TelemetryStore  <---- physical session reset button (min/max + Ah/Wh)
   |
   +--> OledDisplay <---- physical display on/off button
   +--> BleTelemetryService
@@ -29,6 +29,10 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 - Current prototype R015 / 15 mOhm shunt support
 - Voltage, current, power and INA228 die temperature
 - Shunt-voltage telemetry
+- Timestamped, self-contained measurement snapshots with complete/incomplete
+  sample health counters
+- Session Ah / Wh accounting: positive current is discharge; totals reset on
+  power cycle or from the web UI
 - Min/max tracking for all measured/calculated metrics
 - SSD1309 OLED
 - BLE characteristics with human-readable descriptors
@@ -36,7 +40,7 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 - Wi-Fi SoftAP and live dashboard
 - `/api/telemetry` JSON endpoint
 - Web min/max reset
-- Physical min/max reset pushbutton
+- Physical session reset pushbutton (min/max + Ah/Wh)
 - Physical OLED power toggle pushbutton
 
 ## Wiring
@@ -61,12 +65,14 @@ Both buttons use `INPUT_PULLUP`, so no external pull-up resistor is required.
 Use normally-open momentary buttons.
 
 ```text
-GPIO3 ---- pushbutton ---- GND    Reset min/max
-GPIO4 ---- pushbutton ---- GND    OLED on/off
+GPIO3 ---- pushbutton ---- GND    Reset session values (min/max + Ah/Wh)
+GPIO4 ---- pushbutton ---- GND    OLED page / power
 ```
 
-The display button calls the SSD1309/U8g2 power-save function. Measurement,
-BLE and Wi-Fi continue operating while the OLED is off.
+Press the display button to immediately switch between the live/session and
+min/max pages. Hold it for one second to call the SSD1309/U8g2 power-save
+function instead.
+Measurement, BLE and Wi-Fi continue operating while the OLED is off.
 
 Pins are centralized in `include/AppConfig.h` and can be changed there.
 
@@ -127,11 +133,12 @@ build/upload the `xiao_esp32c3` environment.
 Only U8g2 is declared as an external library. ESP32 BLE, Wi-Fi and WebServer
 come from the Arduino-ESP32 framework used by the board environment.
 
-## Future placeholders
+## Roadmap and future placeholders
 
-See `include/future/` and `docs/ROADMAP.md` for placeholders covering:
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the implementation order, design
+decisions and acceptance criteria. `include/future/` contains planning markers
+only; those headers are not runtime APIs yet. The planned work covers:
 
-- Ah / Wh accumulation
 - persistent settings and calibration
 - telemetry history / CSV
 - DS18B20 shunt temperature

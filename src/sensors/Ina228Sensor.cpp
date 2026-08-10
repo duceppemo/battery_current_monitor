@@ -10,7 +10,7 @@ void Ina228Sensor::begin(TwoWire& wire)
 bool Ina228Sensor::readRegister(uint8_t reg, uint8_t* buffer, size_t length)
 {
     if (wire_ == nullptr) {
-        ++failedReads_;
+        ++failedRegisterReads_;
         return false;
     }
 
@@ -42,11 +42,11 @@ bool Ina228Sensor::readRegister(uint8_t reg, uint8_t* buffer, size_t length)
             buffer[i] = static_cast<uint8_t>(wire_->read());
         }
 
-        ++goodReads_;
+        ++successfulRegisterReads_;
         return true;
     }
 
-    ++failedReads_;
+    ++failedRegisterReads_;
     return false;
 }
 
@@ -153,6 +153,10 @@ bool Ina228Sensor::identify()
 
 bool Ina228Sensor::read(Telemetry& telemetry)
 {
+    // Never leave values from an earlier sample behind when a register read
+    // fails. Each call produces a self-contained snapshot.
+    telemetry = Telemetry{};
+
     telemetry.voltageOK = readBusVoltage(telemetry.voltage);
     telemetry.shuntOK = readShuntVoltage(telemetry.shuntVoltage);
     telemetry.temperatureOK = readTemperature(telemetry.temperature);
@@ -163,10 +167,16 @@ bool Ina228Sensor::read(Telemetry& telemetry)
         telemetry.current = NAN;
     }
 
-    if (telemetry.voltageOK && telemetry.shuntOK) {
+    if (telemetry.powerOK()) {
         telemetry.power = telemetry.voltage * telemetry.current;
     } else {
         telemetry.power = NAN;
+    }
+
+    if (telemetry.sensorOK()) {
+        ++successfulSamples_;
+    } else {
+        ++failedSamples_;
     }
 
     return telemetry.sensorOK();

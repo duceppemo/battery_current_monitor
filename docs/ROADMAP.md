@@ -1,64 +1,81 @@
 # Battery Current Monitor Roadmap
 
-## Implemented in this bundle
+This roadmap treats measurement trust as a dependency of every feature that records, displays, or persists a value. Work is ordered so energy counters do not become a second source of truth or integrate stale/partial samples.
 
-- INA228 direct I2C measurement
-- SSD1309 128x64 OLED display
-- BLE GATT telemetry with readable descriptors
-- Combined BLE telemetry stream
-- Wi-Fi SoftAP
-- Live web dashboard
-- JSON telemetry endpoint
-- Current/min/max tracking for voltage, shunt voltage, current, power and INA228 temperature
-- Web min/max reset
-- Physical min/max reset pushbutton
-- Physical OLED on/off pushbutton
-- Debounced active-low button input
-- Modular application architecture
+## Current baseline (complete)
 
-## Next planned modules
+The firmware has one polling owner (`BatteryMonitorApp`), one measurement source (`Ina228Sensor`) and one shared state owner (`TelemetryStore`). OLED, BLE, HTTP and serial diagnostics only consume that state.
 
-### Energy and charge
-- Ah accumulation
-- Wh accumulation
-- session reset
-- signed charge flow
-- native INA228 energy/charge comparison
+Each poll produces a self-contained `Telemetry` snapshot. It includes a monotonic sample sequence and `millis()` timestamp; failed registers remain invalid rather than retaining an old value. Public health counters refer to complete versus incomplete *samples*, while serial diagnostics also expose low-level register-read counts.
 
-### Measurement quality
-- zero-current calibration
-- scale calibration
-- selectable INA228 ADCRANGE
-- configurable shunt value
-- outlier filtering
+### Baseline acceptance checklist
 
-### Physical shunt integration
-- remove INA228 breakout R015 shunt
-- connect original Watt's Up Kelvin sense points
-- change nominal shunt resistance to 1 mOhm
+- [x] Voltage, shunt voltage, current, power and die temperature have explicit validity flags.
+- [x] Min/max values are updated only from finite, valid values and reset from the current valid sample.
+- [x] A failed read cannot reuse a previous measurement as a new one.
+- [x] All outputs read the same stored snapshot; no UI/network layer reads I2C.
+- [x] The JSON API includes sample sequence, age, and complete/incomplete sample counters.
+- [ ] On-hardware validation: verify polarity, accuracy, zero offset and the 15 mOhm shunt value against trusted instruments at the intended operating range.
 
-### Temperature
-- optional DS18B20 mounted on the high-current shunt
-- shunt thermal warning/alarm
+## Phase 1 — Ah / Wh session counters (implemented; validation pending)
 
-### Persistence
-- NVS settings
-- persistent calibration
-- optional persistence of session energy counters
+**Goal:** add explicit session accounting without changing the meaning of the existing instantaneous telemetry or min/max reset.
 
-### Logging
-- rolling RAM history
-- graphing
-- CSV export
-- optional LittleFS history
+The current implementation uses firmware-side trapezoidal integration. Positive
+current/power means **battery discharge**. Counters are intentionally
+session-only and reset after a power cycle. The web UI can reset energy without
+resetting extrema; the single physical reset button clears both energy and
+extrema, with a dedicated application hook for future session stores. Signed
+(`netAh`, `netWh`) and directional charge/discharge totals are available from
+JSON and BLE.
 
-### Networking
-- Wi-Fi station mode
-- AP + station mode
-- configurable network credentials
-- mDNS hostname
+### Design decisions to lock before coding
 
-### Serviceability
-- OTA firmware update
-- diagnostic page
-- firmware/build metadata
+1. [x] Use application-assigned timestamps and trapezoidal integration between consecutive valid samples. It skips incomplete samples, unexpected timing gaps and boot.
+2. [x] Keep signed totals (`netAh`, `netWh`) and directional totals (`chargedAh`/`dischargedAh`, `chargedWh`/`dischargedWh`). Positive is discharge.
+3. [x] Keep session reset separate from min/max reset. A reset establishes a new integration origin and cannot double-count the next interval.
+4. [x] Start with firmware integration from calibrated instantaneous values. Add INA228 native charge/energy registers only as a documented cross-check after ADC configuration and calibration are fixed.
+
+### Module boundary
+
+`EnergyAccumulator` is a pure domain component owned by `BatteryMonitorApp`. It receives the newest `Telemetry` snapshot and returns an `EnergyTotals` value. `TelemetryStore` remains responsible for the latest measurement and extrema only; it does not learn integration policy or storage.
+
+**Done when:** controlled constant-current and constant-power tests agree with an external reference within a documented tolerance; reversed current updates signed and directional totals correctly; missing samples do not create a large integration step; OLED, BLE and JSON show identical totals.
+
+## Phase 2 — Configuration and measurement quality
+
+1. Add an explicit INA228 configuration module: conversion mode, averaging, conversion time and `ADCRANGE` must be written/read back and reported.
+2. Add NVS-backed settings with schema versioning, defaults and validation for shunt resistance, current offset and gain calibration.
+3. Add a guided zero-current calibration flow that records conditions and refuses implausible values.
+4. Define filtering separately from raw measurement acquisition. Preserve raw samples for diagnostics; use filtered values only where explicitly chosen.
+
+**Done when:** settings survive reset, invalid settings fall back safely, and the diagnostics endpoint shows active configuration and calibration version.
+
+## Phase 3 — Physical shunt and thermal safety
+
+1. Move from the breakout's R015 shunt to the original 1 mOhm Kelvin shunt only after confirming wiring, polarity and safe common-mode conditions.
+2. Update the configured nominal resistance and repeat the Phase 1 validation.
+3. Add an optional DS18B20 shunt-temperature driver and independent thermal warning/alarm policy.
+
+**Done when:** electrical and thermal readings are validated under load, and a missing optional temperature sensor degrades only its own feature.
+
+## Phase 4 — History, persistence and networking
+
+1. Add a bounded RAM history buffer with an explicit sample-decimation policy.
+2. Add CSV export; only then consider bounded LittleFS persistence and wear limits.
+3. Make session-counter persistence opt-in and crash-safe.
+4. Add configurable Wi-Fi station/AP modes, credentials and mDNS.
+
+**Done when:** memory limits are documented, exports carry timestamps and units, and no network operation blocks measurement polling.
+
+## Phase 5 — Serviceability
+
+1. Add build metadata and a diagnostics page.
+2. Add authenticated OTA with a documented recovery path.
+3. Add a release checklist covering build, flash, I2C discovery, calibration, web/BLE compatibility and OTA rollback.
+
+## Non-goals until earlier phases pass
+
+- Persisting energy counters before their accuracy and reset semantics are proven.
+- Adding graphs/logging that create a second telemetry path.
+- Using placeholder headers as runtime APIs before their data contracts are agreed.
