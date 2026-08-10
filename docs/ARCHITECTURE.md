@@ -55,7 +55,10 @@ Owns the latest snapshot and extrema. It updates each statistic only with a fini
 
 ### `DebouncedButton`
 
-Provides active-low, edge-triggered input with no knowledge of the action that will be taken.
+Provides active-low input with debounced press, short-press and optional
+long-press events. The display button uses a short press for page selection and
+a one-second hold for OLED power; the button component has no knowledge of
+those actions.
 
 ## Planned extension seams
 

@@ -66,11 +66,13 @@ Use normally-open momentary buttons.
 
 ```text
 GPIO3 ---- pushbutton ---- GND    Reset session values (min/max + Ah/Wh)
-GPIO4 ---- pushbutton ---- GND    OLED on/off
+GPIO4 ---- pushbutton ---- GND    OLED page / power
 ```
 
-The display button calls the SSD1309/U8g2 power-save function. Measurement,
-BLE and Wi-Fi continue operating while the OLED is off.
+Press the display button to immediately switch between the live/session and
+min/max pages. Hold it for one second to call the SSD1309/U8g2 power-save
+function instead.
+Measurement, BLE and Wi-Fi continue operating while the OLED is off.
 
 Pins are centralized in `include/AppConfig.h` and can be changed there.
 

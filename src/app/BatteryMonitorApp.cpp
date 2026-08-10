@@ -2,6 +2,7 @@
 
 #include <esp_system.h>
 #include <Wire.h>
+#include <cstring>
 
 #include "AppConfig.h"
 
@@ -29,6 +30,15 @@ namespace
         default: return "unknown";
         }
     }
+
+    void logRuntimeEvent(const char* message)
+    {
+        const size_t length = strlen(message);
+        if (Serial.availableForWrite() >= static_cast<int>(length + 1)) {
+            Serial.write(reinterpret_cast<const uint8_t*>(message), length);
+            Serial.write('\n');
+        }
+    }
 }
 
 BatteryMonitorApp::BatteryMonitorApp()
@@ -38,7 +48,8 @@ BatteryMonitorApp::BatteryMonitorApp()
       ),
       displayToggleButton_(
           Config::DISPLAY_TOGGLE_BUTTON_PIN,
-          Config::BUTTON_DEBOUNCE_MS
+          Config::BUTTON_DEBOUNCE_MS,
+          Config::DISPLAY_LONG_PRESS_MS
       )
 {
 }
@@ -103,6 +114,7 @@ void BatteryMonitorApp::begin()
 
     display_.showMeasurements(
         telemetry_,
+        energy_.totals(),
         ble_.connected(),
         web_.clientCount(),
         sensor_.failedSamples()
@@ -112,7 +124,7 @@ void BatteryMonitorApp::begin()
     Serial.println("Battery monitor running.");
     Serial.println("Buttons:");
     Serial.printf("  Reset session : GPIO%u -> button -> GND\n", Config::RESET_SESSION_BUTTON_PIN);
-    Serial.printf("  Display toggle: GPIO%u -> button -> GND\n", Config::DISPLAY_TOGGLE_BUTTON_PIN);
+    Serial.printf("  Display: short press = page, hold = on/off (GPIO%u)\n", Config::DISPLAY_TOGGLE_BUTTON_PIN);
 }
 
 void BatteryMonitorApp::scanI2C()
@@ -139,11 +151,12 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
 
     if (resetExtremaButton_.consumePressed()) {
         resetPhysicalSessionState();
-        Serial.println("Session statistics reset from physical button.");
+        logRuntimeEvent("Session statistics reset from physical button.");
 
         if (display_.isOn()) {
             display_.showMeasurements(
                 telemetry_,
+                energy_.totals(),
                 ble_.connected(),
                 web_.clientCount(),
                 sensor_.failedSamples()
@@ -152,12 +165,14 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
     }
 
     if (displayToggleButton_.consumePressed()) {
-        display_.toggle();
-        Serial.printf("Display %s from physical button.\n", display_.isOn() ? "ON" : "OFF");
+        display_.nextPage();
+        displayPageChangedOnPress_ = true;
+        logRuntimeEvent("Display page changed from physical button.");
 
         if (display_.isOn()) {
             display_.showMeasurements(
                 telemetry_,
+                energy_.totals(),
                 ble_.connected(),
                 web_.clientCount(),
                 sensor_.failedSamples()
@@ -165,13 +180,43 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         }
     }
 
-    if (web_.consumeDisplayToggleRequested()) {
+    if (displayToggleButton_.consumeLongPress()) {
+        // The page advances immediately on press for a responsive tap. A hold
+        // changes it back before powering the OLED, preserving long-press
+        // semantics as a pure power action.
+        if (displayPageChangedOnPress_) {
+            display_.nextPage();
+            displayPageChangedOnPress_ = false;
+        }
+
         display_.toggle();
-        Serial.printf("Display %s from web UI.\n", display_.isOn() ? "ON" : "OFF");
+        logRuntimeEvent(display_.isOn() ? "Display ON from long press."
+                                        : "Display OFF from long press.");
 
         if (display_.isOn()) {
             display_.showMeasurements(
                 telemetry_,
+                energy_.totals(),
+                ble_.connected(),
+                web_.clientCount(),
+                sensor_.failedSamples()
+            );
+        }
+    }
+
+    if (displayToggleButton_.consumeShortPress()) {
+        displayPageChangedOnPress_ = false;
+    }
+
+    if (web_.consumeDisplayToggleRequested()) {
+        display_.toggle();
+        logRuntimeEvent(display_.isOn() ? "Display ON from web UI."
+                                        : "Display OFF from web UI.");
+
+        if (display_.isOn()) {
+            display_.showMeasurements(
+                telemetry_,
+                energy_.totals(),
                 ble_.connected(),
                 web_.clientCount(),
                 sensor_.failedSamples()
@@ -181,7 +226,7 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
 
     if (web_.consumeSessionResetRequested()) {
         energy_.reset();
-        Serial.println("Energy session reset from web UI.");
+        logRuntimeEvent("Energy session reset from web UI.");
     }
 }
 
@@ -220,6 +265,7 @@ void BatteryMonitorApp::updateDisplay(uint32_t nowMs)
 
     display_.showMeasurements(
         telemetry_,
+        energy_.totals(),
         ble_.connected(),
         web_.clientCount(),
         sensor_.failedSamples()
