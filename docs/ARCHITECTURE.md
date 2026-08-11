@@ -55,10 +55,11 @@ Owns the latest snapshot and extrema. It updates each statistic only with a fini
 
 ### `DebouncedButton`
 
-Provides active-low input with debounced press, short-press and optional
-long-press events. The display button uses a short press for page selection and
-a one-second hold for OLED power; the button component has no knowledge of
-those actions.
+Provides active-low input with debounced short-press and optional long-press
+events. The reset button uses a short press for the application
+session reset and a one-second hold for an ESP32 restart. The display button
+uses a short press for page selection and a one-second hold for OLED power; the
+button component has no knowledge of those actions.
 
 ## Planned extension seams
 

@@ -9,7 +9,6 @@ public:
 
     void begin();
     void update(uint32_t nowMs);
-    bool consumePressed();
     bool consumeShortPress();
     bool consumeLongPress();
 
@@ -22,7 +21,6 @@ private:
     int stableState_ = HIGH;
     uint32_t lastRawChangeMs_ = 0;
     uint32_t pressedAtMs_ = 0;
-    bool pressedEvent_ = false;
     bool shortPressEvent_ = false;
     bool longPressEvent_ = false;
     bool longPressFired_ = false;

@@ -22,7 +22,9 @@ namespace Config
     constexpr uint8_t RESET_SESSION_BUTTON_PIN = 3;
     constexpr uint8_t DISPLAY_TOGGLE_BUTTON_PIN = 4;
     constexpr uint32_t BUTTON_DEBOUNCE_MS = 40;
+    constexpr uint32_t RESET_RESTART_LONG_PRESS_MS = 1000;
     constexpr uint32_t DISPLAY_LONG_PRESS_MS = 1000;
+    constexpr uint32_t SPLASH_SCREEN_DURATION_MS = 3000;
 
     constexpr uint32_t MEASUREMENT_INTERVAL_MS = 500;
     // A delayed sample is a measurement gap, not energy that may be inferred.
