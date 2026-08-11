@@ -44,5 +44,4 @@ private:
     uint32_t lastSerialMs_ = 0;
     uint32_t measurementSequence_ = 0;
     const char* resetReason_ = "unknown";
-    bool displayPageChangedOnPress_ = false;
 };

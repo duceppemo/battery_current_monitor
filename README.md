@@ -40,7 +40,7 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 - Wi-Fi SoftAP and live dashboard
 - `/api/telemetry` JSON endpoint
 - Web min/max reset
-- Physical session reset pushbutton (min/max + Ah/Wh)
+- Physical reset pushbutton: session reset (min/max + Ah/Wh) or ESP32 restart
 - Physical OLED power toggle pushbutton
 
 ## Wiring
@@ -65,11 +65,15 @@ Both buttons use `INPUT_PULLUP`, so no external pull-up resistor is required.
 Use normally-open momentary buttons.
 
 ```text
-GPIO3 ---- pushbutton ---- GND    Reset session values (min/max + Ah/Wh)
+GPIO3 ---- pushbutton ---- GND    Session reset / ESP32 restart
 GPIO4 ---- pushbutton ---- GND    OLED page / power
 ```
 
-Press the display button to immediately switch between the live/session and
+Briefly press the reset button to reset all session values (min/max + Ah/Wh).
+Hold it for one second to restart the ESP32; a long press does not also reset
+the session values first.
+
+Briefly press the display button to switch between the live/session and
 min/max pages. Hold it for one second to call the SSD1309/U8g2 power-save
 function instead.
 Measurement, BLE and Wi-Fi continue operating while the OLED is off.

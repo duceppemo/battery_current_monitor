@@ -44,7 +44,8 @@ namespace
 BatteryMonitorApp::BatteryMonitorApp()
     : resetExtremaButton_(
           Config::RESET_SESSION_BUTTON_PIN,
-          Config::BUTTON_DEBOUNCE_MS
+          Config::BUTTON_DEBOUNCE_MS,
+          Config::RESET_RESTART_LONG_PRESS_MS
       ),
       displayToggleButton_(
           Config::DISPLAY_TOGGLE_BUTTON_PIN,
@@ -57,6 +58,9 @@ BatteryMonitorApp::BatteryMonitorApp()
 void BatteryMonitorApp::begin()
 {
     Serial.begin(115200);
+    // USB serial output is diagnostic-only. Never hold the local controls or
+    // radio startup while a monitor is detached or not consuming data.
+    Serial.setTxTimeoutMs(0);
     delay(1200);
     resetReason_ = resetReasonText(esp_reset_reason());
 
@@ -82,6 +86,7 @@ void BatteryMonitorApp::begin()
     display_.begin();
     Wire.setClock(Config::I2C_CLOCK_HZ);
     display_.showStartup();
+    delay(Config::SPLASH_SCREEN_DURATION_MS);
 
     sensor_.begin(Wire);
     sensor_.identify();
@@ -123,7 +128,8 @@ void BatteryMonitorApp::begin()
     Serial.println();
     Serial.println("Battery monitor running.");
     Serial.println("Buttons:");
-    Serial.printf("  Reset session : GPIO%u -> button -> GND\n", Config::RESET_SESSION_BUTTON_PIN);
+    Serial.printf("  Reset: short = session, hold = ESP32 restart (GPIO%u)\n",
+                  Config::RESET_SESSION_BUTTON_PIN);
     Serial.printf("  Display: short press = page, hold = on/off (GPIO%u)\n", Config::DISPLAY_TOGGLE_BUTTON_PIN);
 }
 
@@ -149,7 +155,13 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
     resetExtremaButton_.update(nowMs);
     displayToggleButton_.update(nowMs);
 
-    if (resetExtremaButton_.consumePressed()) {
+    if (resetExtremaButton_.consumeLongPress()) {
+        logRuntimeEvent("ESP32 restart from reset-button long press.");
+        ESP.restart();
+        return;
+    }
+
+    if (resetExtremaButton_.consumeShortPress()) {
         resetPhysicalSessionState();
         logRuntimeEvent("Session statistics reset from physical button.");
 
@@ -164,9 +176,8 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         }
     }
 
-    if (displayToggleButton_.consumePressed()) {
+    if (displayToggleButton_.consumeShortPress()) {
         display_.nextPage();
-        displayPageChangedOnPress_ = true;
         logRuntimeEvent("Display page changed from physical button.");
 
         if (display_.isOn()) {
@@ -181,14 +192,6 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
     }
 
     if (displayToggleButton_.consumeLongPress()) {
-        // The page advances immediately on press for a responsive tap. A hold
-        // changes it back before powering the OLED, preserving long-press
-        // semantics as a pure power action.
-        if (displayPageChangedOnPress_) {
-            display_.nextPage();
-            displayPageChangedOnPress_ = false;
-        }
-
         display_.toggle();
         logRuntimeEvent(display_.isOn() ? "Display ON from long press."
                                         : "Display OFF from long press.");
@@ -202,10 +205,6 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
                 sensor_.failedSamples()
             );
         }
-    }
-
-    if (displayToggleButton_.consumeShortPress()) {
-        displayPageChangedOnPress_ = false;
     }
 
     if (web_.consumeDisplayToggleRequested()) {
@@ -333,8 +332,9 @@ void BatteryMonitorApp::update()
 {
     const uint32_t now = millis();
 
-    web_.update();
-    ble_.maintain();
+    // Keep the physical controls and OLED path ahead of transport servicing.
+    // HTTP/Wi-Fi recovery may occasionally take longer than a normal loop,
+    // but it must not make the local interface appear frozen.
     updateButtons(now);
     updateMeasurement(now);
 
@@ -350,6 +350,9 @@ void BatteryMonitorApp::update()
     updateDisplay(now);
     updateBle(now);
     updateSerial(now);
+
+    web_.update();
+    ble_.maintain();
 
     delay(2);
 }
