@@ -1,5 +1,8 @@
 #include "web/WebDashboard.h"
 
+#include <cmath>
+#include <cstdlib>
+
 #include <WiFi.h>
 
 #include "AppConfig.h"
@@ -8,13 +11,36 @@
 namespace
 {
     constexpr uint32_t ACCESS_POINT_HEALTH_CHECK_MS = 5000;
+
+    bool parseFiniteFloat(const WebServer& server, const char* name, float& value)
+    {
+        if (!server.hasArg(name)) {
+            return false;
+        }
+
+        const String text = server.arg(name);
+        char* end = nullptr;
+        const float parsed = strtof(text.c_str(), &end);
+        if (end == text.c_str() || *end != '\0' || !std::isfinite(parsed)) {
+            return false;
+        }
+
+        value = parsed;
+        return true;
+    }
 }
 
-void WebDashboard::begin(TelemetryStore& store, const EnergyTotals& energyTotals)
+void WebDashboard::begin(
+    TelemetryStore& store,
+    const EnergyTotals& energyTotals,
+    const Ina228Sensor& sensor,
+    const CalibrationSettings& calibration)
 {
     store_ = &store;
     energyTotals_ = &energyTotals;
-    telemetryJson_.reserve(1024);
+    sensor_ = &sensor;
+    calibration_ = &calibration;
+    telemetryJson_.reserve(1400);
 
     startAccessPoint();
 
@@ -23,6 +49,8 @@ void WebDashboard::begin(TelemetryStore& store, const EnergyTotals& energyTotals
     server_.on("/api/reset-extrema", HTTP_POST, [this]() { handleResetExtrema(); });
     server_.on("/api/reset-session", HTTP_POST, [this]() { handleResetSession(); });
     server_.on("/api/toggle-display", HTTP_POST, [this]() { handleToggleDisplay(); });
+    server_.on("/api/calibration/save", HTTP_POST, [this]() { handleCalibrationSave(); });
+    server_.on("/api/calibration/reset", HTTP_POST, [this]() { handleCalibrationReset(); });
     server_.onNotFound([this]() { handleNotFound(); });
     server_.begin();
     running_ = true;
@@ -64,6 +92,29 @@ bool WebDashboard::consumeSessionResetRequested()
     const bool requested = sessionResetRequested_;
     sessionResetRequested_ = false;
     return requested;
+}
+
+bool WebDashboard::consumeCalibrationSaveRequested(CurrentCalibration& calibration)
+{
+    if (!calibrationSaveRequested_) {
+        return false;
+    }
+
+    calibration = pendingCalibration_;
+    calibrationSaveRequested_ = false;
+    return true;
+}
+
+bool WebDashboard::consumeCalibrationResetRequested()
+{
+    const bool requested = calibrationResetRequested_;
+    calibrationResetRequested_ = false;
+    return requested;
+}
+
+void WebDashboard::setCalibrationStatus(const char* status)
+{
+    calibrationStatus_ = status;
 }
 
 void WebDashboard::maintainAccessPoint(uint32_t nowMs)
@@ -164,7 +215,8 @@ void WebDashboard::appendMetric(
 
 void WebDashboard::handleTelemetry()
 {
-    if (store_ == nullptr || energyTotals_ == nullptr) {
+    if (store_ == nullptr || energyTotals_ == nullptr || sensor_ == nullptr ||
+        calibration_ == nullptr) {
         server_.send(503, "application/json", "{\"error\":\"telemetry unavailable\"}");
         return;
     }
@@ -197,6 +249,33 @@ void WebDashboard::handleTelemetry()
     json += ",\"chargedWh\":";
     appendNullableFloat(json, true, energyTotals_->chargedWh, 6);
     json += "}";
+
+    const Ina228ConfigurationStatus& configuration = sensor_->configuration();
+    const CurrentCalibration& calibration = calibration_->current();
+    json += ",\"measurement\":{\"ina228Configured\":";
+    json += configuration.configured ? "true" : "false";
+    json += ",\"wideShuntRange\":";
+    json += configuration.wideShuntRange ? "true" : "false";
+    json += ",\"conversionTimeUs\":";
+    appendUnsigned(json, configuration.conversionTimeUs);
+    json += ",\"averages\":";
+    appendUnsigned(json, configuration.averages);
+    json += ",\"configRegister\":";
+    appendUnsigned(json, configuration.configRegister);
+    json += ",\"adcConfigRegister\":";
+    appendUnsigned(json, configuration.adcConfigRegister);
+    json += ",\"calibration\":{\"stored\":";
+    json += calibration_->loadedFromStorage() ? "true" : "false";
+    json += ",\"shuntResistanceOhms\":";
+    appendNullableFloat(json, true, calibration.shuntResistanceOhms, 7);
+    json += ",\"shuntOffsetMicrovolts\":";
+    appendNullableFloat(json, true, calibration.shuntOffsetVolts * 1.0e6f, 2);
+    json += ",\"currentGain\":";
+    appendNullableFloat(json, true, calibration.currentGain, 6);
+    json += ",\"status\":\"";
+    json += calibrationStatus_;
+    json += "\"";
+    json += "}}";
 
     json += ",\"sensorOK\":";
     json += t.sensorOK() ? "true" : "false";
@@ -250,6 +329,30 @@ void WebDashboard::handleToggleDisplay()
 {
     displayToggleRequested_ = true;
     Serial.println("Display toggle requested from web UI.");
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleCalibrationSave()
+{
+    CurrentCalibration requested;
+    if (!parseFiniteFloat(server_, "resistance", requested.shuntResistanceOhms) ||
+        !parseFiniteFloat(server_, "offset", requested.shuntOffsetVolts) ||
+        !parseFiniteFloat(server_, "gain", requested.currentGain) ||
+        !CalibrationSettings::isValid(requested)) {
+        server_.send(400, "application/json", "{\"error\":\"invalid calibration\"}");
+        return;
+    }
+
+    pendingCalibration_ = requested;
+    calibrationSaveRequested_ = true;
+    calibrationStatus_ = "save pending";
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleCalibrationReset()
+{
+    calibrationResetRequested_ = true;
+    calibrationStatus_ = "reset pending";
     server_.send(202, "application/json", "{\"ok\":true}");
 }
 

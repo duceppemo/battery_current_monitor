@@ -90,6 +90,21 @@ void BatteryMonitorApp::begin()
 
     sensor_.begin(Wire);
     sensor_.identify();
+    calibration_.begin();
+    sensor_.setCalibration(calibration_.current());
+    const CurrentCalibration& activeCalibration = calibration_.current();
+    Serial.printf(
+        "Current calibration: %s, R=%.6f ohm, offset=%+.2f uV, gain=%.6f\n",
+        calibration_.loadedFromStorage() ? "stored" : "default",
+        static_cast<double>(activeCalibration.shuntResistanceOhms),
+        static_cast<double>(activeCalibration.shuntOffsetVolts * 1.0e6f),
+        static_cast<double>(activeCalibration.currentGain)
+    );
+    if (sensor_.configure()) {
+        Serial.println("INA228 configuration applied and verified.");
+    } else {
+        Serial.println("WARNING: INA228 configuration verification failed.");
+    }
 
     Telemetry initial;
     sensor_.read(initial);
@@ -99,7 +114,11 @@ void BatteryMonitorApp::begin()
     energy_.update(initial);
 
     ble_.begin();
-    web_.begin(telemetry_, energy_.totals());
+    web_.begin(telemetry_, energy_.totals(), sensor_, calibration_);
+    web_.setCalibrationStatus(
+        calibration_.loadedFromStorage() ? "stored calibration active"
+                                         : "default calibration active"
+    );
     Serial.println("HTTP server started.");
 
     const uint32_t now = millis();
@@ -226,6 +245,31 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
     if (web_.consumeSessionResetRequested()) {
         energy_.reset();
         logRuntimeEvent("Energy session reset from web UI.");
+    }
+
+    CurrentCalibration requestedCalibration;
+    if (web_.consumeCalibrationSaveRequested(requestedCalibration)) {
+        if (calibration_.save(requestedCalibration)) {
+            sensor_.setCalibration(calibration_.current());
+            resetPhysicalSessionState();
+            web_.setCalibrationStatus("saved; session reset");
+            logRuntimeEvent("Calibration saved from web UI; session reset.");
+        } else {
+            web_.setCalibrationStatus("save failed");
+            logRuntimeEvent("Calibration save failed from web UI.");
+        }
+    }
+
+    if (web_.consumeCalibrationResetRequested()) {
+        if (calibration_.clear()) {
+            sensor_.setCalibration(calibration_.current());
+            resetPhysicalSessionState();
+            web_.setCalibrationStatus("default restored; session reset");
+            logRuntimeEvent("Calibration reset to default from web UI; session reset.");
+        } else {
+            web_.setCalibrationStatus("reset failed");
+            logRuntimeEvent("Calibration reset failed from web UI.");
+        }
     }
 }
 

@@ -44,9 +44,9 @@ JSON and BLE.
 
 ## Phase 2 — Configuration and measurement quality
 
-1. Add an explicit INA228 configuration module: conversion mode, averaging, conversion time and `ADCRANGE` must be written/read back and reported.
-2. Add NVS-backed settings with schema versioning, defaults and validation for shunt resistance, current offset and gain calibration.
-3. Add a guided zero-current calibration flow that records conditions and refuses implausible values.
+1. [x] Add an explicit INA228 configuration module: continuous conversion, 16-sample averaging, 1.052 ms conversion time and wide `ADCRANGE` are written, read back and reported.
+2. [x] Add NVS-backed settings with schema versioning, defaults and validation for shunt resistance, current offset and gain calibration. The write path exists but remains intentionally unexposed until the guided flow is complete.
+3. [x] Add a guided zero-current/reference-current calibration flow. It rejects invalid resistance, offset and gain ranges; the operator must still record test conditions with the reference instrument.
 4. Define filtering separately from raw measurement acquisition. Preserve raw samples for diagnostics; use filtered values only where explicitly chosen.
 
 **Done when:** settings survive reset, invalid settings fall back safely, and the diagnostics endpoint shows active configuration and calibration version.

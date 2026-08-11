@@ -45,6 +45,20 @@ Starts components in dependency order, performs non-blocking periodic work, hand
 
 Owns direct INA228 register access, decoding, retry behavior and identity checking. It creates `Telemetry` field values only; it does not update stats, timestamps, BLE, HTTP, display or persistence.
 
+At startup it writes and reads back the explicit ADC configuration. Its raw
+shunt-voltage decoding always matches the configured `ADCRANGE`; conversion to
+current uses the calibration profile passed by the application.
+
+### `CalibrationSettings`
+
+Owns one versioned, validated NVS calibration profile: nominal shunt
+resistance, zero-current shunt-voltage offset and a multiplicative current
+gain. It defaults safely to `AppConfig` when storage is absent, corrupt or out
+of range. It has no I2C, display, BLE or HTTP dependency. The dashboard
+submits validated requests, but `BatteryMonitorApp` is the only component that
+saves or clears a profile, updates `Ina228Sensor`, and starts a fresh session.
+This preserves a single defined boundary between calibration profiles.
+
 ### `TelemetryStore`
 
 Owns the latest snapshot and extrema. It updates each statistic only with a finite valid value. The web min/max action calls `resetExtrema()` directly; the physical reset calls the application-level session reset, which includes extrema and Ah/Wh totals.

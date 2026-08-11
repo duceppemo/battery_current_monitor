@@ -6,6 +6,7 @@
 #include "display/OledDisplay.h"
 #include "energy/EnergyAccumulator.h"
 #include "input/DebouncedButton.h"
+#include "measurement/CalibrationSettings.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
 #include "web/WebDashboard.h"
@@ -29,6 +30,7 @@ private:
     void resetPhysicalSessionState();
 
     Ina228Sensor sensor_;
+    CalibrationSettings calibration_;
     TelemetryStore telemetry_;
     EnergyAccumulator energy_;
     OledDisplay display_;

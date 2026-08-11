@@ -12,8 +12,9 @@ namespace Config
     constexpr uint8_t INA228_ADDRESS = 0x40;
     constexpr uint8_t OLED_ADDRESS = 0x3C;
 
-    // Prototype INA228 breakout uses R015 = 15 mOhm.
-    // Change to 0.001f after moving to the original Watt's Up 1 mOhm shunt.
+    // First-boot default for the prototype INA228 breakout's R015 = 15 mOhm
+    // shunt. A validated NVS calibration profile overrides this at startup.
+    // The planned 100 A / 50 mV Kelvin shunt is 0.0005f ohm.
     constexpr float SHUNT_RESISTANCE_OHMS = 0.015f;
 
     // Pushbuttons are active-low and use the ESP32 internal pull-ups.

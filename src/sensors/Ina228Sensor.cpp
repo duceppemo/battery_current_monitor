@@ -7,6 +7,11 @@ void Ina228Sensor::begin(TwoWire& wire)
     wire_ = &wire;
 }
 
+void Ina228Sensor::setCalibration(const CurrentCalibration& calibration)
+{
+    calibration_ = calibration;
+}
+
 bool Ina228Sensor::readRegister(uint8_t reg, uint8_t* buffer, size_t length)
 {
     if (wire_ == nullptr) {
@@ -60,6 +65,31 @@ bool Ina228Sensor::read16(uint8_t reg, uint16_t& value)
     value = (static_cast<uint16_t>(data[0]) << 8) |
             static_cast<uint16_t>(data[1]);
     return true;
+}
+
+bool Ina228Sensor::write16(uint8_t reg, uint16_t value)
+{
+    if (wire_ == nullptr) {
+        ++failedRegisterReads_;
+        return false;
+    }
+
+    for (uint8_t attempt = 1; attempt <= MAX_I2C_RETRIES; ++attempt) {
+        wire_->beginTransmission(Config::INA228_ADDRESS);
+        wire_->write(reg);
+        wire_->write(static_cast<uint8_t>(value >> 8));
+        wire_->write(static_cast<uint8_t>(value));
+
+        if (wire_->endTransmission(true) == 0) {
+            ++successfulRegisterReads_;
+            return true;
+        }
+
+        delay(2);
+    }
+
+    ++failedRegisterReads_;
+    return false;
 }
 
 bool Ina228Sensor::read24(uint8_t reg, uint32_t& value)
@@ -151,6 +181,39 @@ bool Ina228Sensor::identify()
     return valid;
 }
 
+bool Ina228Sensor::configure()
+{
+    constexpr uint8_t MODE_CONTINUOUS_ALL = 0x0F;
+    constexpr uint8_t CONVERSION_TIME_1052_US = 0x05;
+    constexpr uint8_t AVERAGES_16 = 0x02;
+    constexpr uint16_t EXPECTED_CONFIG = 0x0000;
+    constexpr uint16_t EXPECTED_ADC_CONFIG =
+        (static_cast<uint16_t>(MODE_CONTINUOUS_ALL) << 12) |
+        (static_cast<uint16_t>(CONVERSION_TIME_1052_US) << 9) |
+        (static_cast<uint16_t>(CONVERSION_TIME_1052_US) << 6) |
+        (static_cast<uint16_t>(CONVERSION_TIME_1052_US) << 3) |
+        AVERAGES_16;
+
+    uint16_t configReadback = 0;
+    uint16_t adcConfigReadback = 0;
+    const bool configured =
+        write16(REG_CONFIG, EXPECTED_CONFIG) &&
+        write16(REG_ADC_CONFIG, EXPECTED_ADC_CONFIG) &&
+        read16(REG_CONFIG, configReadback) &&
+        read16(REG_ADC_CONFIG, adcConfigReadback);
+
+    configuration_.configRegister = configReadback;
+    configuration_.adcConfigRegister = adcConfigReadback;
+    configuration_.wideShuntRange = (configReadback & (1U << 4)) == 0;
+    configuration_.conversionTimeUs = 1052;
+    configuration_.averages = 16;
+    configuration_.configured = configured &&
+        configReadback == EXPECTED_CONFIG &&
+        adcConfigReadback == EXPECTED_ADC_CONFIG;
+
+    return configuration_.configured;
+}
+
 bool Ina228Sensor::read(Telemetry& telemetry)
 {
     // Never leave values from an earlier sample behind when a register read
@@ -162,7 +225,9 @@ bool Ina228Sensor::read(Telemetry& telemetry)
     telemetry.temperatureOK = readTemperature(telemetry.temperature);
 
     if (telemetry.shuntOK) {
-        telemetry.current = telemetry.shuntVoltage / Config::SHUNT_RESISTANCE_OHMS;
+        telemetry.current =
+            (telemetry.shuntVoltage - calibration_.shuntOffsetVolts) *
+            calibration_.currentGain / calibration_.shuntResistanceOhms;
     } else {
         telemetry.current = NAN;
     }

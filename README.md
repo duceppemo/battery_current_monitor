@@ -1,7 +1,7 @@
 # Battery Current Monitor — Revision A
 
-Modular firmware prototype for a modernized Watt's Up-style current monitor
-using a Seeed Studio XIAO ESP32-C3, INA228 and SSD1309 128x64 OLED.
+Modular firmware for a wireless battery current monitor using a Seeed Studio
+XIAO ESP32-C3, INA228 and SSD1309 128x64 OLED.
 
 ## Current architecture
 
@@ -26,7 +26,9 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 ## Implemented features
 
 - Direct INA228 register reads over I2C
+- Explicit INA228 conversion configuration with boot-time readback verification
 - Current prototype R015 / 15 mOhm shunt support
+- Versioned NVS calibration profile (resistance, zero offset and gain)
 - Voltage, current, power and INA228 die temperature
 - Shunt-voltage telemetry
 - Timestamped, self-contained measurement snapshots with complete/incomplete
@@ -114,20 +116,35 @@ The existing custom service retains the individual Voltage, Current, Power,
 Temperature and Status characteristics plus the Combined Telemetry
 characteristic.
 
-## Important prototype setting
+## Measurement configuration and calibration
 
-The bundle is configured for the INA228 breakout's onboard `R015` shunt:
+At boot, firmware explicitly configures the INA228 for continuous bus, shunt
+and temperature conversion, 16-sample averaging, 1.052 ms conversion time and
+the wide +/-163.84 mV shunt range. The register values are read back and shown
+in the dashboard's Sensor details panel and `/api/telemetry` response.
+
+The first-boot calibration default is the INA228 breakout's onboard `R015`
+shunt:
 
 ```cpp
 constexpr float SHUNT_RESISTANCE_OHMS = 0.015f;
 ```
 
-When the breakout shunt is removed and the INA228 is connected to the original
-Watt's Up 1 mOhm Kelvin shunt, change that value in `include/AppConfig.h` to:
+The calibration module is deliberately separate from measurement acquisition.
+It validates and stores shunt resistance, shunt-voltage offset and current gain
+in NVS; invalid or absent settings safely use the compile-time default. The
+dashboard's Guided calibration card captures zero-current and reference samples,
+calculates the gain, and then requires an explicit save. Saving or restoring a
+profile starts a new min/max and Ah/Wh session.
+
+For the planned 100 A / 50 mV Kelvin shunt, the nominal resistance will be:
 
 ```cpp
-constexpr float SHUNT_RESISTANCE_OHMS = 0.001f;
+0.050f / 100.0f == 0.0005f
 ```
+
+See [docs/SHUNT_COMMISSIONING.md](docs/SHUNT_COMMISSIONING.md) before moving
+to the new shunt.
 
 ## Build
 
