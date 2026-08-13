@@ -21,13 +21,33 @@ struct Telemetry
     bool shuntOK = false;
     bool temperatureOK = false;
 
+    bool voltageValid() const
+    {
+        return voltageOK && std::isfinite(voltage);
+    }
+
+    bool shuntVoltageValid() const
+    {
+        return shuntOK && std::isfinite(shuntVoltage);
+    }
+
+    bool currentValid() const
+    {
+        return shuntVoltageValid() && std::isfinite(current);
+    }
+
+    bool temperatureValid() const
+    {
+        return temperatureOK && std::isfinite(temperature);
+    }
+
     bool sensorOK() const
     {
-        return voltageOK && shuntOK && temperatureOK;
+        return voltageValid() && currentValid() && temperatureValid();
     }
 
     bool powerOK() const
     {
-        return voltageOK && shuntOK;
+        return voltageValid() && currentValid() && std::isfinite(power);
     }
 };

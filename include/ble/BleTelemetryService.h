@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include <Arduino.h>
 #include <BLEDescriptor.h>
 #include <BLEDevice.h>
@@ -19,8 +21,8 @@ public:
                  uint32_t failedSamples, uint8_t wifiClients);
     void maintain();
 
-    bool connected() const { return connected_; }
-    bool advertising() const { return advertising_; }
+    bool connected() const { return connected_.load(); }
+    bool advertising() const { return advertising_.load(); }
 
 private:
     class ServerCallbacks : public BLEServerCallbacks
@@ -58,7 +60,9 @@ private:
     BLECharacteristic* statusCharacteristic_ = nullptr;
     BLECharacteristic* telemetryCharacteristic_ = nullptr;
 
-    bool connected_ = false;
-    bool previouslyConnected_ = false;
-    bool advertising_ = false;
+    std::atomic_bool connected_{false};
+    std::atomic_bool advertising_{false};
+    std::atomic_bool connectionStateChanged_{false};
+    std::atomic_bool advertisingRestartRequested_{false};
+    bool loggedConnected_ = false;
 };

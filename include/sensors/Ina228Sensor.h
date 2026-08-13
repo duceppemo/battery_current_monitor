@@ -9,9 +9,10 @@
 struct Ina228ConfigurationStatus
 {
     bool configured = false;
-    bool wideShuntRange = true;
-    uint16_t conversionTimeUs = 1052;
-    uint16_t averages = 16;
+    bool readbackValid = false;
+    bool wideShuntRange = false;
+    uint16_t conversionTimeUs = 0;
+    uint16_t averages = 0;
     uint16_t configRegister = 0;
     uint16_t adcConfigRegister = 0;
 };

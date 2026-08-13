@@ -160,7 +160,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the implementation order, design
 decisions and acceptance criteria. `include/future/` contains planning markers
 only; those headers are not runtime APIs yet. The planned work covers:
 
-- persistent settings and calibration
+- broader persistent settings beyond the current calibration profile
 - telemetry history / CSV
 - DS18B20 shunt temperature
 - OTA updates

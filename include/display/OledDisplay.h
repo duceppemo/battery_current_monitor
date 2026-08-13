@@ -40,8 +40,13 @@ private:
                       bool bleConnected, uint8_t wifiClients, uint32_t failedSamples);
     void showExtremaPage(const TelemetryStore& store);
     void drawPair(int baseline, const char* left, const char* right, int rightStart);
+    void sendBufferIfChanged();
+    void invalidateFrame();
 
     U8G2_SSD1309_128X64_NONAME2_F_HW_I2C oled_;
     bool on_ = true;
     Page page_ = Page::Live;
+    uint32_t lastFrameHash_ = 0;
+    bool hasLastFrameHash_ = false;
+    bool frameRefreshRequired_ = true;
 };

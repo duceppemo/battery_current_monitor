@@ -6,7 +6,7 @@ This roadmap treats measurement trust as a dependency of every feature that reco
 
 The firmware has one polling owner (`BatteryMonitorApp`), one measurement source (`Ina228Sensor`) and one shared state owner (`TelemetryStore`). OLED, BLE, HTTP and serial diagnostics only consume that state.
 
-Each poll produces a self-contained `Telemetry` snapshot. It includes a monotonic sample sequence and `millis()` timestamp; failed registers remain invalid rather than retaining an old value. Public health counters refer to complete versus incomplete *samples*, while serial diagnostics also expose low-level register-read counts.
+Each poll produces a self-contained `Telemetry` snapshot. It includes a monotonic sample sequence and completion timestamp; failed registers remain invalid rather than retaining an old value. Public health counters refer to complete versus incomplete *samples*, while serial diagnostics also expose low-level register transaction counts.
 
 ### Baseline acceptance checklist
 
@@ -45,7 +45,7 @@ JSON and BLE.
 ## Phase 2 — Configuration and measurement quality
 
 1. [x] Add an explicit INA228 configuration module: continuous conversion, 16-sample averaging, 1.052 ms conversion time and wide `ADCRANGE` are written, read back and reported.
-2. [x] Add NVS-backed settings with schema versioning, defaults and validation for shunt resistance, current offset and gain calibration. The write path exists but remains intentionally unexposed until the guided flow is complete.
+2. [x] Add NVS-backed settings with schema versioning, defaults and validation for shunt resistance, current offset and gain calibration. The guided dashboard flow saves and restores the profile explicitly.
 3. [x] Add a guided zero-current/reference-current calibration flow. It rejects invalid resistance, offset and gain ranges; the operator must still record test conditions with the reference instrument.
 4. Define filtering separately from raw measurement acquisition. Preserve raw samples for diagnostics; use filtered values only where explicitly chosen.
 
@@ -53,7 +53,7 @@ JSON and BLE.
 
 ## Phase 3 — Physical shunt and thermal safety
 
-1. Move from the breakout's R015 shunt to the original 1 mOhm Kelvin shunt only after confirming wiring, polarity and safe common-mode conditions.
+1. Move from the breakout's R015 shunt to the planned 100 A / 50 mV (0.5 mOhm) Kelvin shunt only after confirming wiring, polarity and safe common-mode conditions.
 2. Update the configured nominal resistance and repeat the Phase 1 validation.
 3. Add an optional DS18B20 shunt-temperature driver and independent thermal warning/alarm policy.
 

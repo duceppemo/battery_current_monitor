@@ -82,39 +82,57 @@ void WebDashboard::update()
 
 bool WebDashboard::consumeDisplayToggleRequested()
 {
-    const bool requested = displayToggleRequested_;
-    displayToggleRequested_ = false;
-    return requested;
+    return consumeCommand(PendingCommand::ToggleDisplay);
 }
 
 bool WebDashboard::consumeSessionResetRequested()
 {
-    const bool requested = sessionResetRequested_;
-    sessionResetRequested_ = false;
-    return requested;
+    return consumeCommand(PendingCommand::ResetSession);
 }
 
 bool WebDashboard::consumeCalibrationSaveRequested(CurrentCalibration& calibration)
 {
-    if (!calibrationSaveRequested_) {
+    if (!consumeCommand(PendingCommand::SaveCalibration)) {
         return false;
     }
 
     calibration = pendingCalibration_;
-    calibrationSaveRequested_ = false;
     return true;
 }
 
 bool WebDashboard::consumeCalibrationResetRequested()
 {
-    const bool requested = calibrationResetRequested_;
-    calibrationResetRequested_ = false;
-    return requested;
+    return consumeCommand(PendingCommand::ResetCalibration);
 }
 
 void WebDashboard::setCalibrationStatus(const char* status)
 {
-    calibrationStatus_ = status;
+    snprintf(
+        calibrationStatus_,
+        sizeof(calibrationStatus_),
+        "%s",
+        status != nullptr ? status : "unknown"
+    );
+}
+
+bool WebDashboard::queueCommand(PendingCommand command)
+{
+    if (pendingCommand_ != PendingCommand::None) {
+        return false;
+    }
+
+    pendingCommand_ = command;
+    return true;
+}
+
+bool WebDashboard::consumeCommand(PendingCommand command)
+{
+    if (pendingCommand_ != command) {
+        return false;
+    }
+
+    pendingCommand_ = PendingCommand::None;
+    return true;
 }
 
 void WebDashboard::maintainAccessPoint(uint32_t nowMs)
@@ -226,15 +244,15 @@ void WebDashboard::handleTelemetry()
     String& json = telemetryJson_;
     json = "{";
 
-    appendMetric(json, "voltage", t.voltageOK, t.voltage, store_->voltageStats(), 6);
+    appendMetric(json, "voltage", t.voltageValid(), t.voltage, store_->voltageStats(), 6);
     json += ",";
-    appendMetric(json, "shuntVoltage", t.shuntOK, t.shuntVoltage, store_->shuntStats(), 9);
+    appendMetric(json, "shuntVoltage", t.shuntVoltageValid(), t.shuntVoltage, store_->shuntStats(), 9);
     json += ",";
-    appendMetric(json, "current", t.shuntOK, t.current, store_->currentStats(), 6);
+    appendMetric(json, "current", t.currentValid(), t.current, store_->currentStats(), 6);
     json += ",";
     appendMetric(json, "power", t.powerOK(), t.power, store_->powerStats(), 6);
     json += ",";
-    appendMetric(json, "temperature", t.temperatureOK, t.temperature, store_->temperatureStats(), 3);
+    appendMetric(json, "temperature", t.temperatureValid(), t.temperature, store_->temperatureStats(), 3);
 
     json += ",\"energy\":{\"netAh\":";
     appendNullableFloat(json, true, energyTotals_->netAh, 6);
@@ -254,6 +272,8 @@ void WebDashboard::handleTelemetry()
     const CurrentCalibration& calibration = calibration_->current();
     json += ",\"measurement\":{\"ina228Configured\":";
     json += configuration.configured ? "true" : "false";
+    json += ",\"ina228ReadbackValid\":";
+    json += configuration.readbackValid ? "true" : "false";
     json += ",\"wideShuntRange\":";
     json += configuration.wideShuntRange ? "true" : "false";
     json += ",\"conversionTimeUs\":";
@@ -320,14 +340,22 @@ void WebDashboard::handleResetExtrema()
 
 void WebDashboard::handleResetSession()
 {
-    sessionResetRequested_ = true;
+    if (!queueCommand(PendingCommand::ResetSession)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
+
     Serial.println("Energy session reset requested from web UI.");
     server_.send(202, "application/json", "{\"ok\":true}");
 }
 
 void WebDashboard::handleToggleDisplay()
 {
-    displayToggleRequested_ = true;
+    if (!queueCommand(PendingCommand::ToggleDisplay)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
+
     Serial.println("Display toggle requested from web UI.");
     server_.send(202, "application/json", "{\"ok\":true}");
 }
@@ -343,16 +371,24 @@ void WebDashboard::handleCalibrationSave()
         return;
     }
 
+    if (!queueCommand(PendingCommand::SaveCalibration)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
+
     pendingCalibration_ = requested;
-    calibrationSaveRequested_ = true;
-    calibrationStatus_ = "save pending";
+    setCalibrationStatus("save pending");
     server_.send(202, "application/json", "{\"ok\":true}");
 }
 
 void WebDashboard::handleCalibrationReset()
 {
-    calibrationResetRequested_ = true;
-    calibrationStatus_ = "reset pending";
+    if (!queueCommand(PendingCommand::ResetCalibration)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
+
+    setCalibrationStatus("reset pending");
     server_.send(202, "application/json", "{\"ok\":true}");
 }
 

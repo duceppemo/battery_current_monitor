@@ -38,6 +38,14 @@ public:
     bool accessPointReady() const { return accessPointReady_; }
 
 private:
+    enum class PendingCommand : uint8_t {
+        None,
+        ToggleDisplay,
+        ResetSession,
+        SaveCalibration,
+        ResetCalibration
+    };
+
     void handleRoot();
     void handleTelemetry();
     void handleResetExtrema();
@@ -48,6 +56,8 @@ private:
     void handleNotFound();
     bool startAccessPoint();
     void maintainAccessPoint(uint32_t nowMs);
+    bool queueCommand(PendingCommand command);
+    bool consumeCommand(PendingCommand command);
 
     static void appendNullableFloat(
         String& json,
@@ -80,12 +90,9 @@ private:
     const char* resetReason_ = "unknown";
     bool accessPointReady_ = false;
     uint32_t lastAccessPointCheckMs_ = 0;
-    bool displayToggleRequested_ = false;
-    bool sessionResetRequested_ = false;
-    bool calibrationSaveRequested_ = false;
-    bool calibrationResetRequested_ = false;
+    PendingCommand pendingCommand_ = PendingCommand::None;
     CurrentCalibration pendingCalibration_;
-    const char* calibrationStatus_ = "unchanged";
+    char calibrationStatus_[48] = "unchanged";
     uint32_t successfulSamples_ = 0;
     uint32_t failedSamples_ = 0;
 };

@@ -8,12 +8,15 @@ void TelemetryStore::update(const Telemetry& telemetry)
 
 void TelemetryStore::updateExtrema()
 {
-    if (current_.voltageOK) {
+    if (current_.voltageValid()) {
         voltageStats_.update(current_.voltage);
     }
 
-    if (current_.shuntOK) {
+    if (current_.shuntVoltageValid()) {
         shuntStats_.update(current_.shuntVoltage);
+    }
+
+    if (current_.currentValid()) {
         currentStats_.update(current_.current);
     }
 
@@ -21,7 +24,7 @@ void TelemetryStore::updateExtrema()
         powerStats_.update(current_.power);
     }
 
-    if (current_.temperatureOK) {
+    if (current_.temperatureValid()) {
         temperatureStats_.update(current_.temperature);
     }
 }

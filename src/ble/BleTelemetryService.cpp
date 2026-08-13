@@ -31,15 +31,18 @@ BleTelemetryService::BleTelemetryService()
 
 void BleTelemetryService::ServerCallbacks::onConnect(BLEServer*)
 {
-    owner_.connected_ = true;
-    owner_.advertising_ = false;
-    Serial.println("BLE client connected.");
+    owner_.connected_.store(true);
+    owner_.advertising_.store(false);
+    owner_.advertisingRestartRequested_.store(false);
+    owner_.connectionStateChanged_.store(true);
 }
 
 void BleTelemetryService::ServerCallbacks::onDisconnect(BLEServer*)
 {
-    owner_.connected_ = false;
-    Serial.println("BLE client disconnected.");
+    owner_.connected_.store(false);
+    owner_.advertising_.store(false);
+    owner_.advertisingRestartRequested_.store(true);
+    owner_.connectionStateChanged_.store(true);
 }
 
 BLECharacteristic* BleTelemetryService::createCharacteristic(
@@ -97,6 +100,10 @@ void BleTelemetryService::begin()
 
 void BleTelemetryService::startAdvertising()
 {
+    if (connected_.load()) {
+        return;
+    }
+
     BLEAdvertising* advertising = BLEDevice::getAdvertising();
 
     // A 128-bit service UUID and device name do not both fit in the 31-byte
@@ -113,7 +120,8 @@ void BleTelemetryService::startAdvertising()
     advertising->setScanResponse(true);
 
     BLEDevice::startAdvertising();
-    advertising_ = true;
+    advertising_.store(true);
+    advertisingRestartRequested_.store(false);
     Serial.printf("BLE advertising as \"%s\"\n", Config::BLE_DEVICE_NAME);
 }
 
@@ -135,41 +143,42 @@ void BleTelemetryService::publish(
     uint8_t wifiClients)
 {
     const Telemetry& telemetry = store.current();
+    const bool notify = connected();
     char buffer[128];
 
-    if (telemetry.voltageOK) {
+    if (telemetry.voltageValid()) {
         snprintf(buffer, sizeof(buffer), "%.3f", telemetry.voltage);
     } else {
         snprintf(buffer, sizeof(buffer), "ERR");
     }
-    updateCharacteristic(voltageCharacteristic_, buffer, connected_);
+    updateCharacteristic(voltageCharacteristic_, buffer, notify);
 
-    if (telemetry.shuntOK) {
+    if (telemetry.currentValid()) {
         snprintf(buffer, sizeof(buffer), "%.6f", telemetry.current);
     } else {
         snprintf(buffer, sizeof(buffer), "ERR");
     }
-    updateCharacteristic(currentCharacteristic_, buffer, connected_);
+    updateCharacteristic(currentCharacteristic_, buffer, notify);
 
     if (telemetry.powerOK()) {
         snprintf(buffer, sizeof(buffer), "%.6f", telemetry.power);
     } else {
         snprintf(buffer, sizeof(buffer), "ERR");
     }
-    updateCharacteristic(powerCharacteristic_, buffer, connected_);
+    updateCharacteristic(powerCharacteristic_, buffer, notify);
 
-    if (telemetry.temperatureOK) {
+    if (telemetry.temperatureValid()) {
         snprintf(buffer, sizeof(buffer), "%.1f", telemetry.temperature);
     } else {
         snprintf(buffer, sizeof(buffer), "ERR");
     }
-    updateCharacteristic(temperatureCharacteristic_, buffer, connected_);
+    updateCharacteristic(temperatureCharacteristic_, buffer, notify);
 
     snprintf(buffer, sizeof(buffer), "%.6f", energy.netAh);
-    updateCharacteristic(ampHourCharacteristic_, buffer, connected_);
+    updateCharacteristic(ampHourCharacteristic_, buffer, notify);
 
     snprintf(buffer, sizeof(buffer), "%.6f", energy.netWh);
-    updateCharacteristic(wattHourCharacteristic_, buffer, connected_);
+    updateCharacteristic(wattHourCharacteristic_, buffer, notify);
 
     snprintf(
         buffer,
@@ -179,7 +188,9 @@ void BleTelemetryService::publish(
         static_cast<unsigned long>(failedSamples),
         static_cast<unsigned>(wifiClients)
     );
-    updateCharacteristic(statusCharacteristic_, buffer, connected_);
+    // These values can exceed the initial ATT notification payload. Keep them
+    // readable without sending MTU-dependent truncated notifications.
+    updateCharacteristic(statusCharacteristic_, buffer, false);
 
     if (telemetry.sensorOK()) {
         snprintf(
@@ -202,19 +213,22 @@ void BleTelemetryService::publish(
             static_cast<unsigned long>(failedSamples)
         );
     }
-    updateCharacteristic(telemetryCharacteristic_, buffer, connected_);
+    updateCharacteristic(telemetryCharacteristic_, buffer, false);
 }
 
 void BleTelemetryService::maintain()
 {
-    if (!connected_ && previouslyConnected_) {
-        if (server_ != nullptr) {
-            startAdvertising();
-        }
-        previouslyConnected_ = false;
+    const bool connected = connected_.load();
+    if (connectionStateChanged_.exchange(false) && connected != loggedConnected_) {
+        Serial.println(connected ? "BLE client connected." : "BLE client disconnected.");
+        loggedConnected_ = connected;
     }
 
-    if (connected_ && !previouslyConnected_) {
-        previouslyConnected_ = true;
+    // A very short connect/disconnect can happen entirely between two loop
+    // passes. The callback-owned restart request preserves that event so BLE
+    // advertising cannot remain stopped after the client leaves.
+    if (advertisingRestartRequested_.exchange(false) && !connected_.load() &&
+        server_ != nullptr) {
+        startAdvertising();
     }
 }

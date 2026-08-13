@@ -288,12 +288,12 @@ void BatteryMonitorApp::updateMeasurement(uint32_t nowMs)
         return;
     }
 
-    lastMeasurementMs_ = nowMs;
-
     Telemetry sample;
     sensor_.read(sample);
+    const uint32_t completedAtMs = millis();
+    lastMeasurementMs_ = completedAtMs;
     sample.sequence = ++measurementSequence_;
-    sample.sampledAtMs = nowMs;
+    sample.sampledAtMs = completedAtMs;
     telemetry_.update(sample);
     energy_.update(sample);
 }

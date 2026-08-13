@@ -4,6 +4,12 @@
 
 #include "AppConfig.h"
 
+namespace
+{
+    constexpr uint32_t FNV1A_OFFSET_BASIS = 2166136261UL;
+    constexpr uint32_t FNV1A_PRIME = 16777619UL;
+}
+
 OledDisplay::OledDisplay()
     : oled_(U8G2_R0, U8X8_PIN_NONE)
 {
@@ -15,12 +21,18 @@ void OledDisplay::begin()
     oled_.begin();
     on_ = true;
     oled_.setPowerSave(0);
+    invalidateFrame();
 }
 
 void OledDisplay::setOn(bool on)
 {
+    if (on_ == on) {
+        return;
+    }
+
     on_ = on;
     oled_.setPowerSave(on ? 0 : 1);
+    invalidateFrame();
 }
 
 void OledDisplay::toggle()
@@ -55,6 +67,7 @@ void OledDisplay::showStartup()
     drawCentered(HARDWARE, 45);
     drawCentered(STARTING, 60);
     oled_.sendBuffer();
+    invalidateFrame();
 }
 
 void OledDisplay::formatCurrent(char* buffer, size_t size, float current, uint8_t decimals)
@@ -133,6 +146,35 @@ void OledDisplay::formatEnergy(
 void OledDisplay::nextPage()
 {
     page_ = page_ == Page::Live ? Page::Extrema : Page::Live;
+    invalidateFrame();
+}
+
+void OledDisplay::invalidateFrame()
+{
+    hasLastFrameHash_ = false;
+    frameRefreshRequired_ = true;
+}
+
+void OledDisplay::sendBufferIfChanged()
+{
+    const uint8_t* buffer = oled_.getBufferPtr();
+    // U8g2 exposes the full-buffer dimensions even when getBufferSize() is
+    // unavailable (it is conditional on dynamic buffer allocation).
+    const uint16_t size = static_cast<uint16_t>(oled_.getBufferTileWidth()) *
+                          static_cast<uint16_t>(oled_.getBufferTileHeight()) * 8U;
+    uint32_t hash = FNV1A_OFFSET_BASIS;
+
+    for (uint16_t index = 0; index < size; ++index) {
+        hash ^= buffer[index];
+        hash *= FNV1A_PRIME;
+    }
+
+    if (frameRefreshRequired_ || !hasLastFrameHash_ || hash != lastFrameHash_) {
+        oled_.sendBuffer();
+        lastFrameHash_ = hash;
+        hasLastFrameHash_ = true;
+        frameRefreshRequired_ = false;
+    }
 }
 
 void OledDisplay::drawPair(int baseline, const char* left, const char* right, int rightStart)
@@ -245,5 +287,5 @@ void OledDisplay::showMeasurements(
         showExtremaPage(store);
     }
 
-    oled_.sendBuffer();
+    sendBufferIfChanged();
 }

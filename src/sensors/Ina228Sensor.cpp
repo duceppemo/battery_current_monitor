@@ -2,6 +2,32 @@
 
 #include "AppConfig.h"
 
+namespace
+{
+    constexpr uint8_t MODE_CONTINUOUS_ALL = 0x0F;
+    constexpr uint8_t CONVERSION_TIME_1052_US = 0x05;
+    constexpr uint8_t AVERAGES_16 = 0x02;
+    constexpr uint16_t EXPECTED_CONFIG = 0x0000;
+    constexpr uint16_t EXPECTED_ADC_CONFIG =
+        (static_cast<uint16_t>(MODE_CONTINUOUS_ALL) << 12) |
+        (static_cast<uint16_t>(CONVERSION_TIME_1052_US) << 9) |
+        (static_cast<uint16_t>(CONVERSION_TIME_1052_US) << 6) |
+        (static_cast<uint16_t>(CONVERSION_TIME_1052_US) << 3) |
+        AVERAGES_16;
+
+    uint16_t conversionTimeUs(uint8_t setting)
+    {
+        constexpr uint16_t VALUES[] = {50, 84, 150, 280, 540, 1052, 2074, 4120};
+        return setting < (sizeof(VALUES) / sizeof(VALUES[0])) ? VALUES[setting] : 0;
+    }
+
+    uint16_t averageCount(uint8_t setting)
+    {
+        constexpr uint16_t VALUES[] = {1, 4, 16, 64, 128, 256, 512, 1024};
+        return setting < (sizeof(VALUES) / sizeof(VALUES[0])) ? VALUES[setting] : 0;
+    }
+}
+
 void Ina228Sensor::begin(TwoWire& wire)
 {
     wire_ = &wire;
@@ -183,31 +209,29 @@ bool Ina228Sensor::identify()
 
 bool Ina228Sensor::configure()
 {
-    constexpr uint8_t MODE_CONTINUOUS_ALL = 0x0F;
-    constexpr uint8_t CONVERSION_TIME_1052_US = 0x05;
-    constexpr uint8_t AVERAGES_16 = 0x02;
-    constexpr uint16_t EXPECTED_CONFIG = 0x0000;
-    constexpr uint16_t EXPECTED_ADC_CONFIG =
-        (static_cast<uint16_t>(MODE_CONTINUOUS_ALL) << 12) |
-        (static_cast<uint16_t>(CONVERSION_TIME_1052_US) << 9) |
-        (static_cast<uint16_t>(CONVERSION_TIME_1052_US) << 6) |
-        (static_cast<uint16_t>(CONVERSION_TIME_1052_US) << 3) |
-        AVERAGES_16;
-
     uint16_t configReadback = 0;
     uint16_t adcConfigReadback = 0;
-    const bool configured =
+    const bool writesSucceeded =
         write16(REG_CONFIG, EXPECTED_CONFIG) &&
-        write16(REG_ADC_CONFIG, EXPECTED_ADC_CONFIG) &&
+        write16(REG_ADC_CONFIG, EXPECTED_ADC_CONFIG);
+    const bool readbackValid = writesSucceeded &&
         read16(REG_CONFIG, configReadback) &&
         read16(REG_ADC_CONFIG, adcConfigReadback);
 
+    configuration_ = Ina228ConfigurationStatus{};
     configuration_.configRegister = configReadback;
     configuration_.adcConfigRegister = adcConfigReadback;
-    configuration_.wideShuntRange = (configReadback & (1U << 4)) == 0;
-    configuration_.conversionTimeUs = 1052;
-    configuration_.averages = 16;
-    configuration_.configured = configured &&
+    configuration_.readbackValid = readbackValid;
+    if (readbackValid) {
+        configuration_.wideShuntRange = (configReadback & (1U << 4)) == 0;
+        configuration_.conversionTimeUs = conversionTimeUs(
+            static_cast<uint8_t>((adcConfigReadback >> 9) & 0x07)
+        );
+        configuration_.averages = averageCount(
+            static_cast<uint8_t>(adcConfigReadback & 0x07)
+        );
+    }
+    configuration_.configured = readbackValid &&
         configReadback == EXPECTED_CONFIG &&
         adcConfigReadback == EXPECTED_ADC_CONFIG;
 
@@ -224,7 +248,11 @@ bool Ina228Sensor::read(Telemetry& telemetry)
     telemetry.shuntOK = readShuntVoltage(telemetry.shuntVoltage);
     telemetry.temperatureOK = readTemperature(telemetry.temperature);
 
-    if (telemetry.shuntOK) {
+    if (telemetry.shuntOK && std::isfinite(telemetry.shuntVoltage) &&
+        std::isfinite(calibration_.shuntResistanceOhms) &&
+        calibration_.shuntResistanceOhms > 0.0f &&
+        std::isfinite(calibration_.shuntOffsetVolts) &&
+        std::isfinite(calibration_.currentGain)) {
         telemetry.current =
             (telemetry.shuntVoltage - calibration_.shuntOffsetVolts) *
             calibration_.currentGain / calibration_.shuntResistanceOhms;
@@ -232,7 +260,7 @@ bool Ina228Sensor::read(Telemetry& telemetry)
         telemetry.current = NAN;
     }
 
-    if (telemetry.powerOK()) {
+    if (telemetry.voltageValid() && telemetry.currentValid()) {
         telemetry.power = telemetry.voltage * telemetry.current;
     } else {
         telemetry.power = NAN;
