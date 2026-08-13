@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 
 #include "AppConfig.h"
@@ -28,6 +29,10 @@ namespace
         "7d9f0006-9c65-4d3d-bdd5-8f4c6b2e1000";
     constexpr char BINARY_TELEMETRY_UUID[] =
         "7d9f0009-9c65-4d3d-bdd5-8f4c6b2e1000";
+    constexpr char DASHBOARD_UUID[] =
+        "7d9f000a-9c65-4d3d-bdd5-8f4c6b2e1000";
+    constexpr char CONTROL_UUID[] =
+        "7d9f000b-9c65-4d3d-bdd5-8f4c6b2e1000";
 
     // This is deliberately limited to the universally supported initial ATT
     // notification payload (20 bytes). It avoids making first connection and
@@ -38,6 +43,16 @@ namespace
     constexpr uint8_t FLAG_CURRENT_VALID = 1 << 1;
     constexpr uint8_t FLAG_POWER_VALID = 1 << 2;
     constexpr uint8_t FLAG_TEMPERATURE_VALID = 1 << 3;
+    constexpr uint8_t DASHBOARD_EXTREMA = 0x11;
+    constexpr uint8_t DASHBOARD_ENERGY = 0x12;
+    constexpr uint8_t DASHBOARD_STATE = 0x13;
+    constexpr uint8_t DASHBOARD_CALIBRATION = 0x14;
+    constexpr uint8_t DASHBOARD_SHUNT = 0x15;
+    constexpr uint8_t CONTROL_RESET_EXTREMA = 1;
+    constexpr uint8_t CONTROL_RESET_SESSION = 2;
+    constexpr uint8_t CONTROL_TOGGLE_DISPLAY = 3;
+    constexpr uint8_t CONTROL_SAVE_CALIBRATION = 4;
+    constexpr uint8_t CONTROL_RESET_CALIBRATION = 5;
 
     int32_t roundAndClamp(float value, float scale, int32_t minimum, int32_t maximum)
     {
@@ -76,6 +91,35 @@ namespace
         destination[1] = static_cast<uint8_t>(encoded >> 8);
         destination[2] = static_cast<uint8_t>(encoded >> 16);
         destination[3] = static_cast<uint8_t>(encoded >> 24);
+    }
+
+    void writeUint32LE(uint8_t* destination, uint32_t value)
+    {
+        writeInt32LE(destination, static_cast<int32_t>(value));
+    }
+
+    uint32_t readUint32LE(const uint8_t* source)
+    {
+        return static_cast<uint32_t>(source[0]) |
+               (static_cast<uint32_t>(source[1]) << 8) |
+               (static_cast<uint32_t>(source[2]) << 16) |
+               (static_cast<uint32_t>(source[3]) << 24);
+    }
+
+    int32_t readInt32LE(const uint8_t* source)
+    {
+        return static_cast<int32_t>(readUint32LE(source));
+    }
+
+    uint8_t resetReasonCode(const char* resetReason)
+    {
+        if (resetReason == nullptr) return 0;
+        if (strcmp(resetReason, "power-on") == 0) return 1;
+        if (strcmp(resetReason, "software reset") == 0) return 2;
+        if (strcmp(resetReason, "external reset") == 0) return 3;
+        if (strcmp(resetReason, "brownout") == 0) return 4;
+        if (strcmp(resetReason, "panic") == 0) return 5;
+        return 255;
     }
 
     void encodeBinaryTelemetry(
@@ -117,7 +161,7 @@ namespace
 }
 
 BleTelemetryService::BleTelemetryService()
-    : callbacks_(*this)
+    : callbacks_(*this), controlCallbacks_(*this)
 {
 }
 
@@ -158,6 +202,19 @@ BLECharacteristic* BleTelemetryService::createCharacteristic(
     return characteristic;
 }
 
+BLECharacteristic* BleTelemetryService::createControlCharacteristic(BLEService* service)
+{
+    BLECharacteristic* characteristic = service->createCharacteristic(
+        CONTROL_UUID,
+        BLECharacteristic::PROPERTY_WRITE
+    );
+
+    BLEDescriptor* userDescription = new BLEDescriptor("2901");
+    userDescription->setValue("Dashboard Control v1");
+    characteristic->addDescriptor(userDescription);
+    return characteristic;
+}
+
 void BleTelemetryService::begin()
 {
     BLEDevice::init(Config::BLE_DEVICE_NAME);
@@ -177,6 +234,10 @@ void BleTelemetryService::begin()
     telemetryCharacteristic_ = createCharacteristic(service, TELEMETRY_UUID, "Combined Telemetry");
     binaryTelemetryCharacteristic_ = createCharacteristic(
         service, BINARY_TELEMETRY_UUID, "Binary Telemetry v1 (20-byte LE)");
+    dashboardCharacteristic_ = createCharacteristic(
+        service, DASHBOARD_UUID, "Dashboard Data v1 (20-byte LE)");
+    controlCharacteristic_ = createControlCharacteristic(service);
+    controlCharacteristic_->setCallbacks(&controlCallbacks_);
 
     voltageCharacteristic_->setValue("0.000");
     currentCharacteristic_->setValue("0.000000");
@@ -190,6 +251,8 @@ void BleTelemetryService::begin()
         static_cast<uint8_t>(BINARY_TELEMETRY_VERSION << 4)
     };
     binaryTelemetryCharacteristic_->setValue(initialBinaryTelemetry, BINARY_TELEMETRY_SIZE);
+    const uint8_t initialDashboard[BINARY_TELEMETRY_SIZE] = {DASHBOARD_EXTREMA};
+    dashboardCharacteristic_->setValue(initialDashboard, BINARY_TELEMETRY_SIZE);
 
     service->start();
 
@@ -249,7 +312,12 @@ void BleTelemetryService::updateBinaryCharacteristic(
 void BleTelemetryService::publish(
     const TelemetryStore& store,
     const EnergyTotals& energy,
-    uint32_t failedSamples,
+    const Ina228Sensor& sensor,
+    const CurrentCalibration& calibration,
+    bool calibrationStored,
+    bool displayOn,
+    bool accessPointReady,
+    const char* resetReason,
     uint8_t wifiClients)
 {
     const Telemetry& telemetry = store.current();
@@ -295,7 +363,7 @@ void BleTelemetryService::publish(
         sizeof(buffer),
         "sensor=%s;failedSamples=%lu;wifi=%u",
         telemetry.sensorOK() ? "OK" : "ERR",
-        static_cast<unsigned long>(failedSamples),
+        static_cast<unsigned long>(sensor.failedSamples()),
         static_cast<unsigned>(wifiClients)
     );
     // These values can exceed the initial ATT notification payload. Keep them
@@ -313,14 +381,14 @@ void BleTelemetryService::publish(
             telemetry.temperature,
             energy.netAh,
             energy.netWh,
-            static_cast<unsigned long>(failedSamples)
+            static_cast<unsigned long>(sensor.failedSamples())
         );
     } else {
         snprintf(
             buffer,
             sizeof(buffer),
             "SENSOR_ERROR;F=%lu",
-            static_cast<unsigned long>(failedSamples)
+            static_cast<unsigned long>(sensor.failedSamples())
         );
     }
     updateCharacteristic(telemetryCharacteristic_, buffer, false);
@@ -329,6 +397,193 @@ void BleTelemetryService::publish(
     encodeBinaryTelemetry(binaryTelemetry, telemetry, energy);
     updateBinaryCharacteristic(binaryTelemetryCharacteristic_, binaryTelemetry,
                                sizeof(binaryTelemetry), notify);
+    publishDashboardPackets(store, energy, sensor, calibration, calibrationStored,
+                            displayOn, accessPointReady, resetReason, wifiClients, notify);
+}
+
+void BleTelemetryService::publishDashboardPackets(
+    const TelemetryStore& store,
+    const EnergyTotals& energy,
+    const Ina228Sensor& sensor,
+    const CurrentCalibration& calibration,
+    bool calibrationStored,
+    bool displayOn,
+    bool accessPointReady,
+    const char* resetReason,
+    uint8_t wifiClients,
+    bool notify)
+{
+    // Cycle one compact data page per scheduled BLE update. This keeps the
+    // link responsive on the ESP32-C3 while a newly connected app has a
+    // complete dashboard within three seconds.
+    uint8_t packet[BINARY_TELEMETRY_SIZE] = {};
+    const Telemetry& telemetry = store.current();
+    const Ina228ConfigurationStatus& config = sensor.configuration();
+    const uint8_t page = dashboardPacketIndex_++ % 5;
+
+    switch (page) {
+    case 0: {
+        packet[0] = DASHBOARD_EXTREMA;
+        const MetricStats& voltage = store.voltageStats();
+        const MetricStats& current = store.currentStats();
+        const MetricStats& power = store.powerStats();
+        const MetricStats& temperature = store.temperatureStats();
+        uint8_t valid = 0;
+        if (voltage.initialized) valid |= FLAG_VOLTAGE_VALID;
+        if (current.initialized) valid |= FLAG_CURRENT_VALID;
+        if (power.initialized) valid |= FLAG_POWER_VALID;
+        if (temperature.initialized) valid |= FLAG_TEMPERATURE_VALID;
+        writeUint16LE(packet + 1, static_cast<uint16_t>(roundAndClamp(
+            voltage.minimum, 1000.0f, 0, std::numeric_limits<uint16_t>::max())));
+        writeUint16LE(packet + 3, static_cast<uint16_t>(roundAndClamp(
+            voltage.maximum, 1000.0f, 0, std::numeric_limits<uint16_t>::max())));
+        writeInt24LE(packet + 5, roundAndClamp(current.minimum, 1000.0f, -8388608, 8388607));
+        writeInt24LE(packet + 8, roundAndClamp(current.maximum, 1000.0f, -8388608, 8388607));
+        writeInt24LE(packet + 11, roundAndClamp(power.minimum, 1000.0f, -8388608, 8388607));
+        writeInt24LE(packet + 14, roundAndClamp(power.maximum, 1000.0f, -8388608, 8388607));
+        packet[17] = static_cast<uint8_t>(roundAndClamp(temperature.minimum, 1.0f, -128, 127));
+        packet[18] = static_cast<uint8_t>(roundAndClamp(temperature.maximum, 1.0f, -128, 127));
+        packet[19] = valid;
+        break;
+    }
+    case 1:
+        packet[0] = DASHBOARD_ENERGY;
+        writeInt32LE(packet + 1, roundAndClamp(energy.dischargedAh, 1000.0f,
+                                                std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        writeInt32LE(packet + 5, roundAndClamp(energy.chargedAh, 1000.0f,
+                                                std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        writeInt32LE(packet + 9, roundAndClamp(energy.dischargedWh, 1000.0f,
+                                                std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        writeInt32LE(packet + 13, roundAndClamp(energy.chargedWh, 1000.0f,
+                                                 std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        break;
+    case 2: {
+        packet[0] = DASHBOARD_STATE;
+        uint8_t flags = 0;
+        if (telemetry.sensorOK()) flags |= 1 << 0;
+        if (displayOn) flags |= 1 << 1;
+        if (config.configured) flags |= 1 << 2;
+        if (config.readbackValid) flags |= 1 << 3;
+        if (config.wideShuntRange) flags |= 1 << 4;
+        if (accessPointReady) flags |= 1 << 5;
+        if (calibrationStored) flags |= 1 << 6;
+        packet[1] = flags;
+        writeUint16LE(packet + 2, static_cast<uint16_t>(telemetry.sequence));
+        writeUint32LE(packet + 4, millis() / 1000UL);
+        writeUint32LE(packet + 8, sensor.successfulSamples());
+        writeUint32LE(packet + 12, sensor.failedSamples());
+        packet[16] = wifiClients;
+        packet[17] = resetReasonCode(resetReason);
+        writeUint16LE(packet + 18, config.conversionTimeUs);
+        break;
+    }
+    case 3:
+        packet[0] = DASHBOARD_CALIBRATION;
+        packet[1] = calibrationStored ? 1 : 0;
+        writeUint32LE(packet + 2, static_cast<uint32_t>(roundAndClamp(
+            calibration.shuntResistanceOhms, 1.0e6f, 0, std::numeric_limits<int32_t>::max())));
+        writeInt32LE(packet + 6, roundAndClamp(
+            calibration.shuntOffsetVolts, 1.0e9f,
+            std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        writeInt32LE(packet + 10, roundAndClamp(
+            calibration.currentGain, 1.0e6f,
+            std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        writeInt32LE(packet + 14, roundAndClamp(
+            telemetry.shuntVoltage, 1.0e9f,
+            std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        packet[18] = telemetry.shuntVoltageValid() ? 1 : 0;
+        break;
+    default: {
+        packet[0] = DASHBOARD_SHUNT;
+        const MetricStats& shunt = store.shuntStats();
+        const MetricStats& temperature = store.temperatureStats();
+        writeInt32LE(packet + 1, roundAndClamp(shunt.minimum, 1.0e9f,
+                                                std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        writeInt32LE(packet + 5, roundAndClamp(shunt.maximum, 1.0e9f,
+                                                std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        writeUint16LE(packet + 9, config.configRegister);
+        writeUint16LE(packet + 11, config.adcConfigRegister);
+        writeUint16LE(packet + 13, config.averages);
+        writeUint16LE(packet + 15, config.conversionTimeUs);
+        packet[17] = static_cast<uint8_t>(roundAndClamp(temperature.minimum, 1.0f, -128, 127));
+        packet[18] = static_cast<uint8_t>(roundAndClamp(temperature.maximum, 1.0f, -128, 127));
+        packet[19] = (shunt.initialized ? 1 : 0) | (temperature.initialized ? 2 : 0);
+        break;
+    }
+    }
+
+    updateBinaryCharacteristic(dashboardCharacteristic_, packet, sizeof(packet), notify);
+}
+
+void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* characteristic)
+{
+    const String value = characteristic->getValue();
+    if (value.length() == 0) {
+        return;
+    }
+
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(value.c_str());
+    PendingCommand command = PendingCommand::None;
+    switch (data[0]) {
+    case CONTROL_RESET_EXTREMA: command = PendingCommand::ResetExtrema; break;
+    case CONTROL_RESET_SESSION: command = PendingCommand::ResetSession; break;
+    case CONTROL_TOGGLE_DISPLAY: command = PendingCommand::ToggleDisplay; break;
+    case CONTROL_RESET_CALIBRATION: command = PendingCommand::ResetCalibration; break;
+    case CONTROL_SAVE_CALIBRATION:
+        if (value.length() < 13) {
+            return;
+        }
+        owner_.pendingResistanceMicroOhms_.store(static_cast<int32_t>(readUint32LE(data + 1)));
+        owner_.pendingOffsetNanoVolts_.store(readInt32LE(data + 5));
+        owner_.pendingGainPpm_.store(readInt32LE(data + 9));
+        command = PendingCommand::SaveCalibration;
+        break;
+    default:
+        return;
+    }
+
+    uint8_t expected = static_cast<uint8_t>(PendingCommand::None);
+    owner_.pendingCommand_.compare_exchange_strong(
+        expected, static_cast<uint8_t>(command));
+}
+
+bool BleTelemetryService::consumeCommand(PendingCommand command)
+{
+    uint8_t expected = static_cast<uint8_t>(command);
+    return pendingCommand_.compare_exchange_strong(
+        expected, static_cast<uint8_t>(PendingCommand::None));
+}
+
+bool BleTelemetryService::consumeResetExtremaRequested()
+{
+    return consumeCommand(PendingCommand::ResetExtrema);
+}
+
+bool BleTelemetryService::consumeSessionResetRequested()
+{
+    return consumeCommand(PendingCommand::ResetSession);
+}
+
+bool BleTelemetryService::consumeDisplayToggleRequested()
+{
+    return consumeCommand(PendingCommand::ToggleDisplay);
+}
+
+bool BleTelemetryService::consumeCalibrationSaveRequested(CurrentCalibration& calibration)
+{
+    if (!consumeCommand(PendingCommand::SaveCalibration)) {
+        return false;
+    }
+
+    calibration.shuntResistanceOhms = static_cast<float>(pendingResistanceMicroOhms_.load()) * 1.0e-6f;
+    calibration.shuntOffsetVolts = static_cast<float>(pendingOffsetNanoVolts_.load()) * 1.0e-9f;
+    calibration.currentGain = static_cast<float>(pendingGainPpm_.load()) * 1.0e-6f;
+    return true;
+}
+
+bool BleTelemetryService::consumeCalibrationResetRequested()
+{
+    return consumeCommand(PendingCommand::ResetCalibration);
 }
 
 void BleTelemetryService::maintain()

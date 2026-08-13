@@ -226,6 +226,32 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         }
     }
 
+    if (ble_.consumeResetExtremaRequested()) {
+        telemetry_.resetExtrema();
+        logRuntimeEvent("Extrema reset from BLE app.");
+    }
+
+    if (ble_.consumeSessionResetRequested()) {
+        energy_.reset();
+        logRuntimeEvent("Energy session reset from BLE app.");
+    }
+
+    if (ble_.consumeDisplayToggleRequested()) {
+        display_.toggle();
+        logRuntimeEvent(display_.isOn() ? "Display ON from BLE app."
+                                        : "Display OFF from BLE app.");
+
+        if (display_.isOn()) {
+            display_.showMeasurements(
+                telemetry_,
+                energy_.totals(),
+                ble_.connected(),
+                web_.clientCount(),
+                sensor_.failedSamples()
+            );
+        }
+    }
+
     if (web_.consumeDisplayToggleRequested()) {
         display_.toggle();
         logRuntimeEvent(display_.isOn() ? "Display ON from web UI."
@@ -269,6 +295,28 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         } else {
             web_.setCalibrationStatus("reset failed");
             logRuntimeEvent("Calibration reset failed from web UI.");
+        }
+    }
+
+    if (ble_.consumeCalibrationSaveRequested(requestedCalibration)) {
+        if (calibration_.save(requestedCalibration)) {
+            sensor_.setCalibration(calibration_.current());
+            resetPhysicalSessionState();
+            web_.setCalibrationStatus("saved by BLE; session reset");
+            logRuntimeEvent("Calibration saved from BLE app; session reset.");
+        } else {
+            logRuntimeEvent("Calibration save from BLE app failed.");
+        }
+    }
+
+    if (ble_.consumeCalibrationResetRequested()) {
+        if (calibration_.clear()) {
+            sensor_.setCalibration(calibration_.current());
+            resetPhysicalSessionState();
+            web_.setCalibrationStatus("default restored by BLE");
+            logRuntimeEvent("Calibration reset to default from BLE app; session reset.");
+        } else {
+            logRuntimeEvent("Calibration reset from BLE app failed.");
         }
     }
 }
@@ -325,7 +373,12 @@ void BatteryMonitorApp::updateBle(uint32_t nowMs)
     ble_.publish(
         telemetry_,
         energy_.totals(),
-        sensor_.failedSamples(),
+        sensor_,
+        calibration_.current(),
+        calibration_.loadedFromStorage(),
+        display_.isOn(),
+        web_.accessPointReady(),
+        resetReason_,
         web_.clientCount()
     );
 }
