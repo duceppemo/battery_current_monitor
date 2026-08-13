@@ -61,10 +61,12 @@ JSON and BLE.
 
 ## Phase 4 — History, persistence and networking
 
-1. Add a bounded RAM history buffer with an explicit sample-decimation policy.
-2. Add CSV export; only then consider bounded LittleFS persistence and wear limits.
-3. Make session-counter persistence opt-in and crash-safe.
-4. Add configurable Wi-Fi station/AP modes, credentials and mDNS.
+1. [x] Define and implement a fixed-size, versioned Binary Telemetry v1 BLE characteristic for a mobile app. Keep the existing text characteristics for diagnostics and generic BLE tools.
+2. Build the Flutter companion app: service-filtered scan, connection lifecycle, binary-telemetry decoding and a live dashboard.
+3. Add a bounded RAM history buffer with an explicit sample-decimation policy.
+4. Add CSV export; only then consider bounded LittleFS persistence and wear limits.
+5. Make session-counter persistence opt-in and crash-safe.
+6. Add configurable Wi-Fi station/AP modes, credentials and mDNS.
 
 **Done when:** memory limits are documented, exports carry timestamps and units, and no network operation blocks measurement polling.
 

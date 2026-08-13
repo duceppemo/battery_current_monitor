@@ -1,5 +1,9 @@
 #include "ble/BleTelemetryService.h"
 
+#include <cmath>
+#include <cstdint>
+#include <limits>
+
 #include "AppConfig.h"
 
 namespace
@@ -22,6 +26,94 @@ namespace
         "7d9f0005-9c65-4d3d-bdd5-8f4c6b2e1000";
     constexpr char TELEMETRY_UUID[] =
         "7d9f0006-9c65-4d3d-bdd5-8f4c6b2e1000";
+    constexpr char BINARY_TELEMETRY_UUID[] =
+        "7d9f0009-9c65-4d3d-bdd5-8f4c6b2e1000";
+
+    // This is deliberately limited to the universally supported initial ATT
+    // notification payload (20 bytes). It avoids making first connection and
+    // live updates depend on the phone negotiating a larger MTU.
+    constexpr size_t BINARY_TELEMETRY_SIZE = 20;
+    constexpr uint8_t BINARY_TELEMETRY_VERSION = 1;
+    constexpr uint8_t FLAG_VOLTAGE_VALID = 1 << 0;
+    constexpr uint8_t FLAG_CURRENT_VALID = 1 << 1;
+    constexpr uint8_t FLAG_POWER_VALID = 1 << 2;
+    constexpr uint8_t FLAG_TEMPERATURE_VALID = 1 << 3;
+
+    int32_t roundAndClamp(float value, float scale, int32_t minimum, int32_t maximum)
+    {
+        if (!std::isfinite(value)) {
+            return 0;
+        }
+
+        const float scaled = value * scale;
+        if (scaled <= static_cast<float>(minimum)) {
+            return minimum;
+        }
+        if (scaled >= static_cast<float>(maximum)) {
+            return maximum;
+        }
+        return static_cast<int32_t>(lroundf(scaled));
+    }
+
+    void writeUint16LE(uint8_t* destination, uint16_t value)
+    {
+        destination[0] = static_cast<uint8_t>(value);
+        destination[1] = static_cast<uint8_t>(value >> 8);
+    }
+
+    void writeInt24LE(uint8_t* destination, int32_t value)
+    {
+        const uint32_t encoded = static_cast<uint32_t>(value) & 0x00FFFFFFUL;
+        destination[0] = static_cast<uint8_t>(encoded);
+        destination[1] = static_cast<uint8_t>(encoded >> 8);
+        destination[2] = static_cast<uint8_t>(encoded >> 16);
+    }
+
+    void writeInt32LE(uint8_t* destination, int32_t value)
+    {
+        const uint32_t encoded = static_cast<uint32_t>(value);
+        destination[0] = static_cast<uint8_t>(encoded);
+        destination[1] = static_cast<uint8_t>(encoded >> 8);
+        destination[2] = static_cast<uint8_t>(encoded >> 16);
+        destination[3] = static_cast<uint8_t>(encoded >> 24);
+    }
+
+    void encodeBinaryTelemetry(
+        uint8_t* packet,
+        const Telemetry& telemetry,
+        const EnergyTotals& energy)
+    {
+        uint8_t flags = 0;
+        if (telemetry.voltageValid()) {
+            flags |= FLAG_VOLTAGE_VALID;
+        }
+        if (telemetry.currentValid()) {
+            flags |= FLAG_CURRENT_VALID;
+        }
+        if (telemetry.powerOK()) {
+            flags |= FLAG_POWER_VALID;
+        }
+        if (telemetry.temperatureValid()) {
+            flags |= FLAG_TEMPERATURE_VALID;
+        }
+
+        packet[0] = static_cast<uint8_t>((BINARY_TELEMETRY_VERSION << 4) | flags);
+        writeUint16LE(packet + 1, static_cast<uint16_t>(telemetry.sequence));
+        writeUint16LE(packet + 3, static_cast<uint16_t>(roundAndClamp(
+            telemetry.voltage, 1000.0f, 0, std::numeric_limits<uint16_t>::max())));
+        writeInt24LE(packet + 5, roundAndClamp(
+            telemetry.current, 1000.0f, -8388608, 8388607));
+        writeInt24LE(packet + 8, roundAndClamp(
+            telemetry.power, 1000.0f, -8388608, 8388607));
+        packet[11] = static_cast<uint8_t>(roundAndClamp(
+            telemetry.temperature, 1.0f, -128, 127));
+        writeInt32LE(packet + 12, roundAndClamp(
+            energy.netAh, 1000.0f,
+            std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        writeInt32LE(packet + 16, roundAndClamp(
+            energy.netWh, 1000.0f,
+            std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+    }
 }
 
 BleTelemetryService::BleTelemetryService()
@@ -83,6 +175,8 @@ void BleTelemetryService::begin()
     wattHourCharacteristic_ = createCharacteristic(service, WATT_HOUR_UUID, "Net Session Energy (Wh; positive = discharge)");
     statusCharacteristic_ = createCharacteristic(service, STATUS_UUID, "Monitor Status");
     telemetryCharacteristic_ = createCharacteristic(service, TELEMETRY_UUID, "Combined Telemetry");
+    binaryTelemetryCharacteristic_ = createCharacteristic(
+        service, BINARY_TELEMETRY_UUID, "Binary Telemetry v1 (20-byte LE)");
 
     voltageCharacteristic_->setValue("0.000");
     currentCharacteristic_->setValue("0.000000");
@@ -92,6 +186,10 @@ void BleTelemetryService::begin()
     wattHourCharacteristic_->setValue("0.000000");
     statusCharacteristic_->setValue("BOOT");
     telemetryCharacteristic_->setValue("V=0;I=0;P=0;T=0;Ah=0;Wh=0");
+    const uint8_t initialBinaryTelemetry[BINARY_TELEMETRY_SIZE] = {
+        static_cast<uint8_t>(BINARY_TELEMETRY_VERSION << 4)
+    };
+    binaryTelemetryCharacteristic_->setValue(initialBinaryTelemetry, BINARY_TELEMETRY_SIZE);
 
     service->start();
 
@@ -131,6 +229,18 @@ void BleTelemetryService::updateCharacteristic(
     bool notify)
 {
     characteristic->setValue(value);
+    if (notify) {
+        characteristic->notify();
+    }
+}
+
+void BleTelemetryService::updateBinaryCharacteristic(
+    BLECharacteristic* characteristic,
+    const uint8_t* value,
+    size_t length,
+    bool notify)
+{
+    characteristic->setValue(value, length);
     if (notify) {
         characteristic->notify();
     }
@@ -214,6 +324,11 @@ void BleTelemetryService::publish(
         );
     }
     updateCharacteristic(telemetryCharacteristic_, buffer, false);
+
+    uint8_t binaryTelemetry[BINARY_TELEMETRY_SIZE] = {};
+    encodeBinaryTelemetry(binaryTelemetry, telemetry, energy);
+    updateBinaryCharacteristic(binaryTelemetryCharacteristic_, binaryTelemetry,
+                               sizeof(binaryTelemetry), notify);
 }
 
 void BleTelemetryService::maintain()

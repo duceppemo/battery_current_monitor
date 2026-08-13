@@ -114,7 +114,10 @@ BatteryMonitor
 
 The existing custom service retains the individual Voltage, Current, Power,
 Temperature and Status characteristics plus the Combined Telemetry
-characteristic.
+characteristic. It also exposes a compact, notify-capable Binary Telemetry v1
+characteristic for the Flutter app. Its fixed 20-byte format works without MTU
+negotiation; the complete contract is in
+[docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md).
 
 ## Measurement configuration and calibration
 

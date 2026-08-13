@@ -47,6 +47,12 @@ private:
         const char* value,
         bool notify
     );
+    static void updateBinaryCharacteristic(
+        BLECharacteristic* characteristic,
+        const uint8_t* value,
+        size_t length,
+        bool notify
+    );
     void startAdvertising();
 
     ServerCallbacks callbacks_;
@@ -59,6 +65,7 @@ private:
     BLECharacteristic* wattHourCharacteristic_ = nullptr;
     BLECharacteristic* statusCharacteristic_ = nullptr;
     BLECharacteristic* telemetryCharacteristic_ = nullptr;
+    BLECharacteristic* binaryTelemetryCharacteristic_ = nullptr;
 
     std::atomic_bool connected_{false};
     std::atomic_bool advertising_{false};

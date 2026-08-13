@@ -65,7 +65,7 @@ Owns the latest snapshot and extrema. It updates each statistic only with a fini
 
 ### Presentation and transport components
 
-`OledDisplay`, `BleTelemetryService` and `WebDashboard` consume stored state only. `WebDashboard` also owns SoftAP/HTTP and JSON serialization; `BleTelemetryService` owns GATT and advertising state. Neither performs I2C work or retains a competing measurement cache.
+`OledDisplay`, `BleTelemetryService` and `WebDashboard` consume stored state only. `WebDashboard` also owns SoftAP/HTTP and JSON serialization; `BleTelemetryService` owns GATT and advertising state, including the documented binary mobile-app telemetry contract. Neither performs I2C work or retains a competing measurement cache.
 
 ### `DebouncedButton`
 
