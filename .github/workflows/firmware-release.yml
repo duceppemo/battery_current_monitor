@@ -33,5 +33,11 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           mkdir -p release
           cp .pio/build/xiao_esp32c3/firmware.bin "release/battery-monitor-${version}.bin"
-          cp .pio/build/xiao_esp32c3/firmware.factory.bin "release/battery-monitor-${version}.factory.bin"
+          python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32c3 merge_bin \
+            --flash_mode dio --flash_freq 80m --flash_size 4MB \
+            -o "release/battery-monitor-${version}.factory.bin" \
+            0x0 .pio/build/xiao_esp32c3/bootloader.bin \
+            0x8000 .pio/build/xiao_esp32c3/partitions.bin \
+            0xe000 "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" \
+            0x10000 .pio/build/xiao_esp32c3/firmware.bin
           gh release create "$GITHUB_REF_NAME" release/* --generate-notes
