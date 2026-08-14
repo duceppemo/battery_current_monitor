@@ -21,11 +21,6 @@ namespace
         case ESP_RST_DEEPSLEEP: return "deep sleep";
         case ESP_RST_BROWNOUT: return "brownout";
         case ESP_RST_SDIO: return "SDIO reset";
-        case ESP_RST_USB: return "USB reset";
-        case ESP_RST_JTAG: return "JTAG reset";
-        case ESP_RST_EFUSE: return "eFuse error";
-        case ESP_RST_PWR_GLITCH: return "power glitch";
-        case ESP_RST_CPU_LOCKUP: return "CPU lockup";
         case ESP_RST_UNKNOWN:
         default: return "unknown";
         }

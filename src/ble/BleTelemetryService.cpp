@@ -206,7 +206,7 @@ BLECharacteristic* BleTelemetryService::createCharacteristic(
 
     BLEDescriptor* userDescription = new BLEDescriptor("2901");
     userDescription->setValue(
-        reinterpret_cast<const uint8_t*>(description),
+        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(description)),
         strlen(description)
     );
     characteristic->addDescriptor(userDescription);
@@ -285,16 +285,16 @@ void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
     wattHourCharacteristic_->setValue("0.000000");
     statusCharacteristic_->setValue("BOOT");
     telemetryCharacteristic_->setValue("V=0;I=0;P=0;T=0;Ah=0;Wh=0");
-    const uint8_t initialBinaryTelemetry[BINARY_TELEMETRY_SIZE] = {
+    uint8_t initialBinaryTelemetry[BINARY_TELEMETRY_SIZE] = {
         static_cast<uint8_t>(BINARY_TELEMETRY_VERSION << 4)
     };
     binaryTelemetryCharacteristic_->setValue(initialBinaryTelemetry, BINARY_TELEMETRY_SIZE);
-    const uint8_t initialDashboard[BINARY_TELEMETRY_SIZE] = {DASHBOARD_EXTREMA};
+    uint8_t initialDashboard[BINARY_TELEMETRY_SIZE] = {DASHBOARD_EXTREMA};
     dashboardCharacteristic_->setValue(initialDashboard, BINARY_TELEMETRY_SIZE);
-    const uint8_t initialFirmwareStatus[FIRMWARE_UPDATE_STATUS_SIZE] = {};
+    uint8_t initialFirmwareStatus[FIRMWARE_UPDATE_STATUS_SIZE] = {};
     firmwareUpdateStatusCharacteristic_->setValue(
         initialFirmwareStatus, sizeof(initialFirmwareStatus));
-    const uint8_t initialControlStatus[CONTROL_STATUS_SIZE] = {1};
+    uint8_t initialControlStatus[CONTROL_STATUS_SIZE] = {1};
     controlStatusCharacteristic_->setValue(initialControlStatus, sizeof(initialControlStatus));
     char deviceInfo[96];
     snprintf(
@@ -355,7 +355,9 @@ void BleTelemetryService::updateBinaryCharacteristic(
     size_t length,
     bool notify)
 {
-    characteristic->setValue(value, length);
+    // Arduino-ESP32 3.2 exposes only a mutable-pointer overload even though
+    // setValue copies the bytes synchronously.
+    characteristic->setValue(const_cast<uint8_t*>(value), length);
     if (notify) {
         characteristic->notify();
     }
@@ -625,7 +627,7 @@ void BleTelemetryService::publishDashboardPackets(
 
 void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* characteristic)
 {
-    const String value = characteristic->getValue();
+    const auto value = characteristic->getValue();
     if (value.length() == 0) {
         return;
     }
@@ -684,7 +686,7 @@ void BleTelemetryService::FirmwareTransferCallbacks::onWrite(BLECharacteristic* 
         return;
     }
 
-    const String value = characteristic->getValue();
+    const auto value = characteristic->getValue();
     if (value.length() == 0) {
         return;
     }
