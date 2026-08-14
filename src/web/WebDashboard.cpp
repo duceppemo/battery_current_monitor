@@ -14,7 +14,7 @@ namespace
 {
     constexpr uint32_t ACCESS_POINT_HEALTH_CHECK_MS = 5000;
 
-    bool parseFiniteFloat(const WebServer& server, const char* name, float& value)
+    bool parseFiniteFloat(WebServer& server, const char* name, float& value)
     {
         if (!server.hasArg(name)) {
             return false;
