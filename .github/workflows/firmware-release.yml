@@ -1,0 +1,37 @@
+name: Publish firmware release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Verify release tag matches firmware version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          embedded_version="$(sed -n 's/^#define BATTERY_MONITOR_FIRMWARE_VERSION "\([^"]*\)"/\1/p' include/AppConfig.h)"
+          test -n "$embedded_version"
+          test "$version" = "$embedded_version"
+      - name: Build OTA and factory images
+        run: pio run
+      - name: Publish GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p release
+          cp .pio/build/xiao_esp32c3/firmware.bin "release/battery-monitor-${version}.bin"
+          cp .pio/build/xiao_esp32c3/firmware.factory.bin "release/battery-monitor-${version}.factory.bin"
+          gh release create "$GITHUB_REF_NAME" release/* --generate-notes

@@ -34,14 +34,19 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 - Timestamped, self-contained measurement snapshots with complete/incomplete
   sample health counters
 - Session Ah / Wh accounting: positive current is discharge; totals reset on
-  power cycle or from the web UI
+  power cycle or through the Web Dashboard and Flutter app
 - Min/max tracking for all measured/calculated metrics
+- Persistent low/high-voltage, current, temperature and sensor-health alarms
 - SSD1309 OLED
-- BLE characteristics with human-readable descriptors
+- BLE characteristics with human-readable descriptors and acknowledged controls
 - Combined BLE telemetry
 - Wi-Fi SoftAP and live dashboard
 - `/api/telemetry` JSON endpoint
-- Web min/max reset
+- Separate Web and BLE reset controls for extrema and energy
+- Device Information reporting firmware version, hardware revision and BLE capabilities
+- Local Web Dashboard firmware `.bin` upload
+- BLE firmware transfer with sequential frames, CRC-32 and image verification
+- Shared OTA writer lock so Web and BLE updates cannot run concurrently
 - Physical reset pushbutton: session reset (min/max + Ah/Wh) or ESP32 restart
 - Physical OLED power toggle pushbutton
 
@@ -104,6 +109,11 @@ The dashboard shows live, minimum and maximum values for:
 
 The dashboard also shows BLE, I2C, Wi-Fi-client and display status.
 
+It provides grouped controls beside the affected data: separate extrema and
+session-energy resets, OLED power, guided calibration, persistent alarm limits
+and Web OTA. The update card shows both the installed firmware version and the
+version detected in a selected OTA image before upload.
+
 ## BLE
 
 Device name:
@@ -118,6 +128,12 @@ characteristic. It also exposes a compact, notify-capable Binary Telemetry v1
 characteristic for the Flutter app. Its fixed 20-byte format works without MTU
 negotiation; the complete contract is in
 [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md).
+
+Firmware 0.5.1 advertises `telemetry1,dashboard1,ota1,control1` in Device
+Information. Binary telemetry and rotating dashboard pages update once per
+second. Dashboard commands include a request ID and return an explicit
+applied, rejected or failed result, so a client never has to infer success from
+a write response alone.
 
 ## Measurement configuration and calibration
 
@@ -163,10 +179,10 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the implementation order, design
 decisions and acceptance criteria. `include/future/` contains planning markers
 only; those headers are not runtime APIs yet. The planned work covers:
 
-- broader persistent settings beyond the current calibration profile
-- telemetry history / CSV
+- broader persistent settings beyond the current calibration and alarm profiles
+- optional device-side telemetry history / CSV persistence
 - DS18B20 shunt temperature
-- OTA updates
+- signed/authenticated OTA hardening
 
 ## PIOArduino / Arduino-ESP32 3.x compatibility
 
@@ -175,6 +191,16 @@ The BLE layer relies on NimBLE's automatic Client Characteristic Configuration D
 
 ## Flash partition layout
 
-The project uses the Arduino-ESP32 `min_spiffs.csv` 4 MB partition scheme. This provides two larger OTA-capable application slots (about 1.9 MB each), which is required because Wi-Fi + BLE + the web dashboard exceed the XIAO ESP32-C3 default 1.25 MB OTA application slot. It retains OTA capability for the planned OTA update feature.
+The project uses the Arduino-ESP32 `min_spiffs.csv` 4 MB partition scheme. This provides two larger OTA-capable application slots (about 1.9 MB each), which is required because Wi-Fi + BLE + the web dashboard exceed the XIAO ESP32-C3 default 1.25 MB OTA application slot. It provides the inactive application slot used by the Web Dashboard and BLE firmware-update paths.
 
 If changing partition schemes on a board that already has firmware installed, perform a full flash erase once before uploading the new build if the board does not boot after the first upload.
+
+## Firmware releases and updates
+
+Build output is `.pio/build/xiao_esp32c3/firmware.bin`; this is the OTA asset.
+Do not use the combined `firmware.factory.bin` for an OTA update. The Web
+Dashboard can upload a local `firmware.bin` at `http://192.168.4.1`. Firmware
+0.5.1 also accepts a downloaded release asset from the Flutter app over BLE.
+Only one update transport can own the OTA writer at a time. After a verified
+BLE update, the monitor keeps its status available briefly before restarting.
+See [docs/RELEASES.md](docs/RELEASES.md) for the release and recovery process.

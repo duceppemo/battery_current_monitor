@@ -85,12 +85,13 @@ void BatteryMonitorApp::begin()
 
     display_.begin();
     Wire.setClock(Config::I2C_CLOCK_HZ);
-    display_.showStartup();
+    display_.showStartup(Config::FIRMWARE_VERSION);
     delay(Config::SPLASH_SCREEN_DURATION_MS);
 
     sensor_.begin(Wire);
     sensor_.identify();
     calibration_.begin();
+    alarms_.begin();
     sensor_.setCalibration(calibration_.current());
     const CurrentCalibration& activeCalibration = calibration_.current();
     Serial.printf(
@@ -111,10 +112,11 @@ void BatteryMonitorApp::begin()
     initial.sequence = ++measurementSequence_;
     initial.sampledAtMs = millis();
     telemetry_.update(initial);
+    alarmMonitor_.update(initial, alarms_.current());
     energy_.update(initial);
 
-    ble_.begin();
-    web_.begin(telemetry_, energy_.totals(), sensor_, calibration_);
+    ble_.begin(firmwareUpdate_);
+    web_.begin(telemetry_, energy_.totals(), sensor_, calibration_, alarms_, alarmMonitor_, firmwareUpdate_);
     web_.setCalibrationStatus(
         calibration_.loadedFromStorage() ? "stored calibration active"
                                          : "default calibration active"
@@ -226,18 +228,22 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         }
     }
 
-    if (ble_.consumeResetExtremaRequested()) {
+    uint16_t bleRequestId = 0;
+    if (ble_.consumeResetExtremaRequested(bleRequestId)) {
         telemetry_.resetExtrema();
+        ble_.reportControlResult(1, bleRequestId, BleTelemetryService::ControlResult::Applied);
         logRuntimeEvent("Extrema reset from BLE app.");
     }
 
-    if (ble_.consumeSessionResetRequested()) {
+    if (ble_.consumeSessionResetRequested(bleRequestId)) {
         energy_.reset();
+        ble_.reportControlResult(2, bleRequestId, BleTelemetryService::ControlResult::Applied);
         logRuntimeEvent("Energy session reset from BLE app.");
     }
 
-    if (ble_.consumeDisplayToggleRequested()) {
+    if (ble_.consumeDisplayToggleRequested(bleRequestId)) {
         display_.toggle();
+        ble_.reportControlResult(3, bleRequestId, BleTelemetryService::ControlResult::Applied);
         logRuntimeEvent(display_.isOn() ? "Display ON from BLE app."
                                         : "Display OFF from BLE app.");
 
@@ -274,6 +280,7 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
     }
 
     CurrentCalibration requestedCalibration;
+    DeviceAlarmSettings requestedAlarms;
     if (web_.consumeCalibrationSaveRequested(requestedCalibration)) {
         if (calibration_.save(requestedCalibration)) {
             sensor_.setCalibration(calibration_.current());
@@ -298,25 +305,49 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         }
     }
 
-    if (ble_.consumeCalibrationSaveRequested(requestedCalibration)) {
+    if (web_.consumeAlarmSaveRequested(requestedAlarms)) {
+        if (alarms_.save(requestedAlarms)) {
+            alarmMonitor_.update(telemetry_.current(), alarms_.current());
+            logRuntimeEvent("Device alarms saved from web UI.");
+        } else {
+            logRuntimeEvent("Device alarm save from web UI failed.");
+        }
+    }
+
+    if (ble_.consumeCalibrationSaveRequested(requestedCalibration, bleRequestId)) {
         if (calibration_.save(requestedCalibration)) {
             sensor_.setCalibration(calibration_.current());
             resetPhysicalSessionState();
+            ble_.reportControlResult(4, bleRequestId, BleTelemetryService::ControlResult::Applied);
             web_.setCalibrationStatus("saved by BLE; session reset");
             logRuntimeEvent("Calibration saved from BLE app; session reset.");
         } else {
+            ble_.reportControlResult(4, bleRequestId, BleTelemetryService::ControlResult::Failed);
             logRuntimeEvent("Calibration save from BLE app failed.");
         }
     }
 
-    if (ble_.consumeCalibrationResetRequested()) {
+    if (ble_.consumeCalibrationResetRequested(bleRequestId)) {
         if (calibration_.clear()) {
             sensor_.setCalibration(calibration_.current());
             resetPhysicalSessionState();
+            ble_.reportControlResult(5, bleRequestId, BleTelemetryService::ControlResult::Applied);
             web_.setCalibrationStatus("default restored by BLE");
             logRuntimeEvent("Calibration reset to default from BLE app; session reset.");
         } else {
+            ble_.reportControlResult(5, bleRequestId, BleTelemetryService::ControlResult::Failed);
             logRuntimeEvent("Calibration reset from BLE app failed.");
+        }
+    }
+
+    if (ble_.consumeAlarmSaveRequested(requestedAlarms, bleRequestId)) {
+        if (alarms_.save(requestedAlarms)) {
+            alarmMonitor_.update(telemetry_.current(), alarms_.current());
+            ble_.reportControlResult(6, bleRequestId, BleTelemetryService::ControlResult::Applied);
+            logRuntimeEvent("Device alarms saved from BLE app.");
+        } else {
+            ble_.reportControlResult(6, bleRequestId, BleTelemetryService::ControlResult::Failed);
+            logRuntimeEvent("Device alarm save from BLE app failed.");
         }
     }
 }
@@ -343,6 +374,7 @@ void BatteryMonitorApp::updateMeasurement(uint32_t nowMs)
     sample.sequence = ++measurementSequence_;
     sample.sampledAtMs = completedAtMs;
     telemetry_.update(sample);
+    alarmMonitor_.update(sample, alarms_.current());
     energy_.update(sample);
 }
 
@@ -375,6 +407,8 @@ void BatteryMonitorApp::updateBle(uint32_t nowMs)
         energy_.totals(),
         sensor_,
         calibration_.current(),
+        alarms_.current(),
+        alarmMonitor_.state(),
         calibration_.loadedFromStorage(),
         display_.isOn(),
         web_.accessPointReady(),
@@ -433,6 +467,16 @@ void BatteryMonitorApp::update()
     // HTTP/Wi-Fi recovery may occasionally take longer than a normal loop,
     // but it must not make the local interface appear frozen.
     updateButtons(now);
+    if (firmwareUpdate_.consumeRestartRequested()) {
+        firmwareRestartAtMs_ = now + Config::BLE_OTA_RESTART_GRACE_MS;
+        logRuntimeEvent("Firmware update verified; allowing BLE status delivery before restart.");
+    }
+    if (firmwareRestartAtMs_ != 0 &&
+        static_cast<int32_t>(now - firmwareRestartAtMs_) >= 0) {
+        logRuntimeEvent("Restarting into verified firmware image.");
+        ESP.restart();
+        return;
+    }
     updateMeasurement(now);
 
     web_.setRuntimeStatus(

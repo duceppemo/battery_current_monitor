@@ -33,6 +33,14 @@ namespace
         "7d9f000a-9c65-4d3d-bdd5-8f4c6b2e1000";
     constexpr char CONTROL_UUID[] =
         "7d9f000b-9c65-4d3d-bdd5-8f4c6b2e1000";
+    constexpr char DEVICE_INFO_UUID[] =
+        "7d9f000c-9c65-4d3d-bdd5-8f4c6b2e1000";
+    constexpr char FIRMWARE_TRANSFER_UUID[] =
+        "7d9f000d-9c65-4d3d-bdd5-8f4c6b2e1000";
+    constexpr char FIRMWARE_UPDATE_STATUS_UUID[] =
+        "7d9f000e-9c65-4d3d-bdd5-8f4c6b2e1000";
+    constexpr char CONTROL_STATUS_UUID[] =
+        "7d9f000f-9c65-4d3d-bdd5-8f4c6b2e1000";
 
     // This is deliberately limited to the universally supported initial ATT
     // notification payload (20 bytes). It avoids making first connection and
@@ -48,11 +56,15 @@ namespace
     constexpr uint8_t DASHBOARD_STATE = 0x13;
     constexpr uint8_t DASHBOARD_CALIBRATION = 0x14;
     constexpr uint8_t DASHBOARD_SHUNT = 0x15;
+    constexpr uint8_t DASHBOARD_ALARMS = 0x16;
     constexpr uint8_t CONTROL_RESET_EXTREMA = 1;
     constexpr uint8_t CONTROL_RESET_SESSION = 2;
     constexpr uint8_t CONTROL_TOGGLE_DISPLAY = 3;
     constexpr uint8_t CONTROL_SAVE_CALIBRATION = 4;
     constexpr uint8_t CONTROL_RESET_CALIBRATION = 5;
+    constexpr uint8_t CONTROL_SAVE_ALARMS = 6;
+    constexpr size_t FIRMWARE_UPDATE_STATUS_SIZE = 12;
+    constexpr size_t CONTROL_STATUS_SIZE = 6;
 
     int32_t roundAndClamp(float value, float scale, int32_t minimum, int32_t maximum)
     {
@@ -161,7 +173,7 @@ namespace
 }
 
 BleTelemetryService::BleTelemetryService()
-    : callbacks_(*this), controlCallbacks_(*this)
+    : callbacks_(*this), controlCallbacks_(*this), firmwareTransferCallbacks_(*this)
 {
 }
 
@@ -215,8 +227,27 @@ BLECharacteristic* BleTelemetryService::createControlCharacteristic(BLEService* 
     return characteristic;
 }
 
-void BleTelemetryService::begin()
+BLECharacteristic* BleTelemetryService::createControlStatusCharacteristic(BLEService* service)
 {
+    return createCharacteristic(service, CONTROL_STATUS_UUID, "Control Result v1");
+}
+
+BLECharacteristic* BleTelemetryService::createFirmwareTransferCharacteristic(BLEService* service)
+{
+    BLECharacteristic* characteristic = service->createCharacteristic(
+        FIRMWARE_TRANSFER_UUID,
+        BLECharacteristic::PROPERTY_WRITE
+    );
+
+    BLEDescriptor* userDescription = new BLEDescriptor("2901");
+    userDescription->setValue("Firmware Transfer v1 (sequential write)");
+    characteristic->addDescriptor(userDescription);
+    return characteristic;
+}
+
+void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
+{
+    firmwareUpdate_ = &firmwareUpdate;
     BLEDevice::init(Config::BLE_DEVICE_NAME);
 
     server_ = BLEDevice::createServer();
@@ -238,6 +269,13 @@ void BleTelemetryService::begin()
         service, DASHBOARD_UUID, "Dashboard Data v1 (20-byte LE)");
     controlCharacteristic_ = createControlCharacteristic(service);
     controlCharacteristic_->setCallbacks(&controlCallbacks_);
+    controlStatusCharacteristic_ = createControlStatusCharacteristic(service);
+    deviceInfoCharacteristic_ = createCharacteristic(
+        service, DEVICE_INFO_UUID, "Device Information");
+    firmwareTransferCharacteristic_ = createFirmwareTransferCharacteristic(service);
+    firmwareTransferCharacteristic_->setCallbacks(&firmwareTransferCallbacks_);
+    firmwareUpdateStatusCharacteristic_ = createCharacteristic(
+        service, FIRMWARE_UPDATE_STATUS_UUID, "Firmware Update Status v1 (12-byte LE)");
 
     voltageCharacteristic_->setValue("0.000");
     currentCharacteristic_->setValue("0.000000");
@@ -253,6 +291,20 @@ void BleTelemetryService::begin()
     binaryTelemetryCharacteristic_->setValue(initialBinaryTelemetry, BINARY_TELEMETRY_SIZE);
     const uint8_t initialDashboard[BINARY_TELEMETRY_SIZE] = {DASHBOARD_EXTREMA};
     dashboardCharacteristic_->setValue(initialDashboard, BINARY_TELEMETRY_SIZE);
+    const uint8_t initialFirmwareStatus[FIRMWARE_UPDATE_STATUS_SIZE] = {};
+    firmwareUpdateStatusCharacteristic_->setValue(
+        initialFirmwareStatus, sizeof(initialFirmwareStatus));
+    const uint8_t initialControlStatus[CONTROL_STATUS_SIZE] = {1};
+    controlStatusCharacteristic_->setValue(initialControlStatus, sizeof(initialControlStatus));
+    char deviceInfo[96];
+    snprintf(
+        deviceInfo,
+        sizeof(deviceInfo),
+        "FW=%s;HW=%s;BLE=telemetry1,dashboard1,ota1,control1",
+        Config::FIRMWARE_VERSION,
+        Config::HARDWARE_REVISION
+    );
+    deviceInfoCharacteristic_->setValue(deviceInfo);
 
     service->start();
 
@@ -314,6 +366,8 @@ void BleTelemetryService::publish(
     const EnergyTotals& energy,
     const Ina228Sensor& sensor,
     const CurrentCalibration& calibration,
+    const DeviceAlarmSettings& alarms,
+    const DeviceAlarmState& alarmState,
     bool calibrationStored,
     bool displayOn,
     bool accessPointReady,
@@ -397,8 +451,47 @@ void BleTelemetryService::publish(
     encodeBinaryTelemetry(binaryTelemetry, telemetry, energy);
     updateBinaryCharacteristic(binaryTelemetryCharacteristic_, binaryTelemetry,
                                sizeof(binaryTelemetry), notify);
-    publishDashboardPackets(store, energy, sensor, calibration, calibrationStored,
+    publishDashboardPackets(store, energy, sensor, calibration, alarms, alarmState, calibrationStored,
                             displayOn, accessPointReady, resetReason, wifiClients, notify);
+
+    publishFirmwareUpdateStatus(notify);
+}
+
+void BleTelemetryService::publishFirmwareUpdateStatus(bool notify)
+{
+    // This compact status is available even before MTU negotiation. The app
+    // uses it to distinguish a transport acknowledgement from a verified OTA
+    // image; telemetry continues normally while the transfer is in progress.
+    uint8_t firmwareStatus[FIRMWARE_UPDATE_STATUS_SIZE] = {};
+    if (firmwareUpdate_ != nullptr) {
+        firmwareStatus[0] = 1; // Firmware Update Status protocol version.
+        firmwareStatus[1] = static_cast<uint8_t>(firmwareUpdate_->state());
+        writeUint32LE(firmwareStatus + 2, firmwareUpdate_->receivedBytes());
+        writeUint32LE(firmwareStatus + 6, firmwareUpdate_->expectedBytes());
+        firmwareStatus[10] = static_cast<uint8_t>(firmwareUpdate_->error());
+    }
+    updateBinaryCharacteristic(firmwareUpdateStatusCharacteristic_, firmwareStatus,
+                               sizeof(firmwareStatus), notify);
+}
+
+void BleTelemetryService::publishControlStatus(bool notify)
+{
+    uint8_t status[CONTROL_STATUS_SIZE] = {1};
+    status[1] = controlStatusCommand_.load();
+    writeUint16LE(status + 2, controlStatusRequestId_.load());
+    status[4] = controlStatusResult_.load();
+    updateBinaryCharacteristic(controlStatusCharacteristic_, status, sizeof(status), notify);
+}
+
+void BleTelemetryService::reportControlResult(
+    uint8_t command,
+    uint16_t requestId,
+    ControlResult result)
+{
+    controlStatusCommand_.store(command);
+    controlStatusRequestId_.store(requestId);
+    controlStatusResult_.store(static_cast<uint8_t>(result));
+    controlStatusDirty_.store(true);
 }
 
 void BleTelemetryService::publishDashboardPackets(
@@ -406,6 +499,8 @@ void BleTelemetryService::publishDashboardPackets(
     const EnergyTotals& energy,
     const Ina228Sensor& sensor,
     const CurrentCalibration& calibration,
+    const DeviceAlarmSettings& alarms,
+    const DeviceAlarmState& alarmState,
     bool calibrationStored,
     bool displayOn,
     bool accessPointReady,
@@ -415,11 +510,11 @@ void BleTelemetryService::publishDashboardPackets(
 {
     // Cycle one compact data page per scheduled BLE update. This keeps the
     // link responsive on the ESP32-C3 while a newly connected app has a
-    // complete dashboard within three seconds.
+    // complete dashboard within six seconds.
     uint8_t packet[BINARY_TELEMETRY_SIZE] = {};
     const Telemetry& telemetry = store.current();
     const Ina228ConfigurationStatus& config = sensor.configuration();
-    const uint8_t page = dashboardPacketIndex_++ % 5;
+    const uint8_t page = dashboardPacketIndex_++ % 6;
 
     switch (page) {
     case 0: {
@@ -493,7 +588,7 @@ void BleTelemetryService::publishDashboardPackets(
             std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
         packet[18] = telemetry.shuntVoltageValid() ? 1 : 0;
         break;
-    default: {
+    case 4: {
         packet[0] = DASHBOARD_SHUNT;
         const MetricStats& shunt = store.shuntStats();
         const MetricStats& temperature = store.temperatureStats();
@@ -510,6 +605,19 @@ void BleTelemetryService::publishDashboardPackets(
         packet[19] = (shunt.initialized ? 1 : 0) | (temperature.initialized ? 2 : 0);
         break;
     }
+    default:
+        packet[0] = DASHBOARD_ALARMS;
+        packet[1] = (alarms.lowVoltageEnabled ? 1 : 0) |
+                    (alarms.highVoltageEnabled ? 2 : 0) |
+                    (alarms.currentEnabled ? 4 : 0) |
+                    (alarms.temperatureEnabled ? 8 : 0) |
+                    (alarms.sensorHealthEnabled ? 16 : 0);
+        packet[2] = alarmState.activeFlags;
+        writeUint16LE(packet + 3, static_cast<uint16_t>(roundAndClamp(alarms.lowVoltage, 1000.0f, 0, 65535)));
+        writeUint16LE(packet + 5, static_cast<uint16_t>(roundAndClamp(alarms.highVoltage, 1000.0f, 0, 65535)));
+        writeInt24LE(packet + 7, roundAndClamp(alarms.maxAbsoluteCurrent, 1000.0f, 0, 8388607));
+        writeInt32LE(packet + 10, roundAndClamp(alarms.maxTemperature, 10.0f, -1280, 1270));
+        break;
     }
 
     updateBinaryCharacteristic(dashboardCharacteristic_, packet, sizeof(packet), notify);
@@ -523,6 +631,10 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
     }
 
     const uint8_t* data = reinterpret_cast<const uint8_t*>(value.c_str());
+    const uint16_t requestId = value.length() >= 3
+        ? static_cast<uint16_t>(data[value.length() - 2]) |
+              (static_cast<uint16_t>(data[value.length() - 1]) << 8)
+        : 0;
     PendingCommand command = PendingCommand::None;
     switch (data[0]) {
     case CONTROL_RESET_EXTREMA: command = PendingCommand::ResetExtrema; break;
@@ -533,45 +645,86 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
         if (value.length() < 13) {
             return;
         }
-        owner_.pendingResistanceMicroOhms_.store(static_cast<int32_t>(readUint32LE(data + 1)));
-        owner_.pendingOffsetNanoVolts_.store(readInt32LE(data + 5));
-        owner_.pendingGainPpm_.store(readInt32LE(data + 9));
         command = PendingCommand::SaveCalibration;
+        break;
+    case CONTROL_SAVE_ALARMS:
+        if (value.length() < 13) return;
+        command = PendingCommand::SaveAlarms;
         break;
     default:
         return;
     }
 
     uint8_t expected = static_cast<uint8_t>(PendingCommand::None);
-    owner_.pendingCommand_.compare_exchange_strong(
-        expected, static_cast<uint8_t>(command));
+    if (owner_.pendingCommand_.compare_exchange_strong(
+            expected, static_cast<uint8_t>(PendingCommand::Writing))) {
+        owner_.pendingRequestId_.store(requestId);
+        if (command == PendingCommand::SaveCalibration) {
+            owner_.pendingResistanceMicroOhms_.store(static_cast<int32_t>(readUint32LE(data + 1)));
+            owner_.pendingOffsetNanoVolts_.store(readInt32LE(data + 5));
+            owner_.pendingGainPpm_.store(readInt32LE(data + 9));
+        } else if (command == PendingCommand::SaveAlarms) {
+            owner_.pendingAlarmFlags_.store(data[1]);
+            owner_.pendingLowVoltageMv_.store(data[2] | (data[3] << 8));
+            owner_.pendingHighVoltageMv_.store(data[4] | (data[5] << 8));
+            owner_.pendingCurrentMa_.store(
+                static_cast<int32_t>(data[6]) | (static_cast<int32_t>(data[7]) << 8) | (static_cast<int32_t>(data[8]) << 16));
+            owner_.pendingTemperatureDeciC_.store(readInt32LE(data + 9));
+        }
+        owner_.pendingCommand_.store(static_cast<uint8_t>(command));
+    } else {
+        owner_.reportControlResult(
+            data[0], requestId, ControlResult::Rejected);
+    }
 }
 
-bool BleTelemetryService::consumeCommand(PendingCommand command)
+void BleTelemetryService::FirmwareTransferCallbacks::onWrite(BLECharacteristic* characteristic)
+{
+    if (owner_.firmwareUpdate_ == nullptr) {
+        return;
+    }
+
+    const String value = characteristic->getValue();
+    if (value.length() == 0) {
+        return;
+    }
+
+    owner_.firmwareUpdate_->handleFrame(
+        reinterpret_cast<const uint8_t*>(value.c_str()), value.length());
+    owner_.publishFirmwareUpdateStatus(owner_.connected());
+}
+
+bool BleTelemetryService::consumeCommand(PendingCommand command, uint16_t& requestId)
 {
     uint8_t expected = static_cast<uint8_t>(command);
-    return pendingCommand_.compare_exchange_strong(
-        expected, static_cast<uint8_t>(PendingCommand::None));
+    if (!pendingCommand_.compare_exchange_strong(
+            expected, static_cast<uint8_t>(PendingCommand::None))) {
+        return false;
+    }
+    requestId = pendingRequestId_.load();
+    return true;
 }
 
-bool BleTelemetryService::consumeResetExtremaRequested()
+bool BleTelemetryService::consumeResetExtremaRequested(uint16_t& requestId)
 {
-    return consumeCommand(PendingCommand::ResetExtrema);
+    return consumeCommand(PendingCommand::ResetExtrema, requestId);
 }
 
-bool BleTelemetryService::consumeSessionResetRequested()
+bool BleTelemetryService::consumeSessionResetRequested(uint16_t& requestId)
 {
-    return consumeCommand(PendingCommand::ResetSession);
+    return consumeCommand(PendingCommand::ResetSession, requestId);
 }
 
-bool BleTelemetryService::consumeDisplayToggleRequested()
+bool BleTelemetryService::consumeDisplayToggleRequested(uint16_t& requestId)
 {
-    return consumeCommand(PendingCommand::ToggleDisplay);
+    return consumeCommand(PendingCommand::ToggleDisplay, requestId);
 }
 
-bool BleTelemetryService::consumeCalibrationSaveRequested(CurrentCalibration& calibration)
+bool BleTelemetryService::consumeCalibrationSaveRequested(
+    CurrentCalibration& calibration,
+    uint16_t& requestId)
 {
-    if (!consumeCommand(PendingCommand::SaveCalibration)) {
+    if (!consumeCommand(PendingCommand::SaveCalibration, requestId)) {
         return false;
     }
 
@@ -581,9 +734,27 @@ bool BleTelemetryService::consumeCalibrationSaveRequested(CurrentCalibration& ca
     return true;
 }
 
-bool BleTelemetryService::consumeCalibrationResetRequested()
+bool BleTelemetryService::consumeCalibrationResetRequested(uint16_t& requestId)
 {
-    return consumeCommand(PendingCommand::ResetCalibration);
+    return consumeCommand(PendingCommand::ResetCalibration, requestId);
+}
+
+bool BleTelemetryService::consumeAlarmSaveRequested(
+    DeviceAlarmSettings& settings,
+    uint16_t& requestId)
+{
+    if (!consumeCommand(PendingCommand::SaveAlarms, requestId)) return false;
+    const uint8_t flags = pendingAlarmFlags_.load();
+    settings.lowVoltageEnabled = (flags & 1) != 0;
+    settings.highVoltageEnabled = (flags & 2) != 0;
+    settings.currentEnabled = (flags & 4) != 0;
+    settings.temperatureEnabled = (flags & 8) != 0;
+    settings.sensorHealthEnabled = (flags & 16) != 0;
+    settings.lowVoltage = pendingLowVoltageMv_.load() / 1000.0f;
+    settings.highVoltage = pendingHighVoltageMv_.load() / 1000.0f;
+    settings.maxAbsoluteCurrent = pendingCurrentMa_.load() / 1000.0f;
+    settings.maxTemperature = pendingTemperatureDeciC_.load() / 10.0f;
+    return true;
 }
 
 void BleTelemetryService::maintain()
@@ -600,5 +771,9 @@ void BleTelemetryService::maintain()
     if (advertisingRestartRequested_.exchange(false) && !connected_.load() &&
         server_ != nullptr) {
         startAdvertising();
+    }
+
+    if (controlStatusDirty_.exchange(false) && connected_.load()) {
+        publishControlStatus(true);
     }
 }

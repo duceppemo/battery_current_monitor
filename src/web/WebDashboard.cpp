@@ -4,6 +4,8 @@
 #include <cstdlib>
 
 #include <WiFi.h>
+#include <Update.h>
+#include <esp_system.h>
 
 #include "AppConfig.h"
 #include "web/DashboardHtml.h"
@@ -34,12 +36,18 @@ void WebDashboard::begin(
     TelemetryStore& store,
     const EnergyTotals& energyTotals,
     const Ina228Sensor& sensor,
-    const CalibrationSettings& calibration)
+    const CalibrationSettings& calibration,
+    const AlarmSettings& alarms,
+    const AlarmMonitor& alarmMonitor,
+    FirmwareUpdateService& firmwareUpdate)
 {
     store_ = &store;
     energyTotals_ = &energyTotals;
     sensor_ = &sensor;
     calibration_ = &calibration;
+    alarms_ = &alarms;
+    alarmMonitor_ = &alarmMonitor;
+    firmwareUpdate_ = &firmwareUpdate;
     telemetryJson_.reserve(1400);
 
     startAccessPoint();
@@ -51,6 +59,20 @@ void WebDashboard::begin(
     server_.on("/api/toggle-display", HTTP_POST, [this]() { handleToggleDisplay(); });
     server_.on("/api/calibration/save", HTTP_POST, [this]() { handleCalibrationSave(); });
     server_.on("/api/calibration/reset", HTTP_POST, [this]() { handleCalibrationReset(); });
+    server_.on("/api/alarms/save", HTTP_POST, [this]() { handleAlarmSave(); });
+    server_.on("/api/firmware", HTTP_POST,
+        [this]() {
+            if (firmwareUpdateSucceeded_) {
+                server_.send(200, "application/json", "{\"ok\":true,\"message\":\"Firmware written; restarting\"}");
+                restartAfterMs_ = millis() + 750;
+            } else {
+                String response = "{\"error\":\"";
+                response += firmwareUpdateError_[0] ? firmwareUpdateError_ : "firmware update failed";
+                response += "\"}";
+                server_.send(400, "application/json", response);
+            }
+        },
+        [this]() { handleFirmwareUpload(); });
     server_.onNotFound([this]() { handleNotFound(); });
     server_.begin();
     running_ = true;
@@ -77,6 +99,9 @@ void WebDashboard::update()
     if (running_) {
         server_.handleClient();
         maintainAccessPoint(millis());
+        if (restartAfterMs_ != 0 && static_cast<int32_t>(millis() - restartAfterMs_) >= 0) {
+            ESP.restart();
+        }
     }
 }
 
@@ -103,6 +128,13 @@ bool WebDashboard::consumeCalibrationSaveRequested(CurrentCalibration& calibrati
 bool WebDashboard::consumeCalibrationResetRequested()
 {
     return consumeCommand(PendingCommand::ResetCalibration);
+}
+
+bool WebDashboard::consumeAlarmSaveRequested(DeviceAlarmSettings& settings)
+{
+    if (!consumeCommand(PendingCommand::SaveAlarms)) return false;
+    settings = pendingAlarms_;
+    return true;
 }
 
 void WebDashboard::setCalibrationStatus(const char* status)
@@ -234,7 +266,7 @@ void WebDashboard::appendMetric(
 void WebDashboard::handleTelemetry()
 {
     if (store_ == nullptr || energyTotals_ == nullptr || sensor_ == nullptr ||
-        calibration_ == nullptr) {
+        calibration_ == nullptr || alarms_ == nullptr || alarmMonitor_ == nullptr) {
         server_.send(503, "application/json", "{\"error\":\"telemetry unavailable\"}");
         return;
     }
@@ -242,7 +274,11 @@ void WebDashboard::handleTelemetry()
     const Telemetry& t = store_->current();
 
     String& json = telemetryJson_;
-    json = "{";
+    json = "{\"firmwareVersion\":\"";
+    json += Config::FIRMWARE_VERSION;
+    json += "\",\"firmwareImageMarker\":\"";
+    json += Config::FIRMWARE_IMAGE_MARKER;
+    json += "\",";
 
     appendMetric(json, "voltage", t.voltageValid(), t.voltage, store_->voltageStats(), 6);
     json += ",";
@@ -296,6 +332,17 @@ void WebDashboard::handleTelemetry()
     json += calibrationStatus_;
     json += "\"";
     json += "}}";
+
+    const DeviceAlarmSettings& alarms = alarms_->current();
+    json += ",\"alarms\":{\"enabledFlags\":";
+    appendUnsigned(json, (alarms.lowVoltageEnabled ? 1 : 0) | (alarms.highVoltageEnabled ? 2 : 0) | (alarms.currentEnabled ? 4 : 0) | (alarms.temperatureEnabled ? 8 : 0) | (alarms.sensorHealthEnabled ? 16 : 0));
+    json += ",\"activeFlags\":";
+    appendUnsigned(json, alarmMonitor_->state().activeFlags);
+    json += ",\"lowVoltage\":"; appendNullableFloat(json, true, alarms.lowVoltage, 3);
+    json += ",\"highVoltage\":"; appendNullableFloat(json, true, alarms.highVoltage, 3);
+    json += ",\"maxCurrent\":"; appendNullableFloat(json, true, alarms.maxAbsoluteCurrent, 3);
+    json += ",\"maxTemperature\":"; appendNullableFloat(json, true, alarms.maxTemperature, 1);
+    json += "}";
 
     json += ",\"sensorOK\":";
     json += t.sensorOK() ? "true" : "false";
@@ -390,6 +437,70 @@ void WebDashboard::handleCalibrationReset()
 
     setCalibrationStatus("reset pending");
     server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleAlarmSave()
+{
+    DeviceAlarmSettings requested;
+    float flagsValue = 0.0f;
+    if (!parseFiniteFloat(server_, "flags", flagsValue) || !parseFiniteFloat(server_, "low", requested.lowVoltage) ||
+        !parseFiniteFloat(server_, "high", requested.highVoltage) || !parseFiniteFloat(server_, "current", requested.maxAbsoluteCurrent) ||
+        !parseFiniteFloat(server_, "temperature", requested.maxTemperature)) {
+        server_.send(400, "application/json", "{\"error\":\"invalid alarms\"}"); return;
+    }
+    const uint8_t flags = static_cast<uint8_t>(flagsValue);
+    requested.lowVoltageEnabled = (flags & 1) != 0;
+    requested.highVoltageEnabled = (flags & 2) != 0;
+    requested.currentEnabled = (flags & 4) != 0;
+    requested.temperatureEnabled = (flags & 8) != 0;
+    requested.sensorHealthEnabled = (flags & 16) != 0;
+    if (!AlarmSettings::isValid(requested) || !queueCommand(PendingCommand::SaveAlarms)) {
+        server_.send(400, "application/json", "{\"error\":\"alarms rejected\"}"); return;
+    }
+    pendingAlarms_ = requested;
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleFirmwareUpload()
+{
+    HTTPUpload& upload = server_.upload();
+    switch (upload.status) {
+    case UPLOAD_FILE_START:
+        firmwareUpdateSucceeded_ = false;
+        firmwareUpdateError_[0] = '\0';
+        if (!upload.filename.endsWith(".bin") || firmwareUpdate_ == nullptr ||
+            !firmwareUpdate_->beginWebUpdate()) {
+            snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "update start rejected");
+        } else if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+            firmwareUpdate_->abandonWebUpdate();
+            snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "update start rejected");
+        }
+        break;
+    case UPLOAD_FILE_WRITE:
+        if (firmwareUpdateError_[0] == '\0' &&
+            Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            Update.abort();
+            firmwareUpdate_->abandonWebUpdate();
+            snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "firmware write failed");
+        }
+        break;
+    case UPLOAD_FILE_END:
+        if (firmwareUpdateError_[0] == '\0' && Update.end(true)) {
+            firmwareUpdateSucceeded_ = true;
+        } else if (firmwareUpdateError_[0] == '\0') {
+            Update.abort();
+            firmwareUpdate_->abandonWebUpdate();
+            snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "firmware verification failed");
+        }
+        break;
+    case UPLOAD_FILE_ABORTED:
+        Update.abort();
+        if (firmwareUpdate_ != nullptr) firmwareUpdate_->abandonWebUpdate();
+        snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "upload aborted");
+        break;
+    default:
+        break;
+    }
 }
 
 void WebDashboard::handleNotFound()

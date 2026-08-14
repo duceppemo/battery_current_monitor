@@ -9,27 +9,38 @@
 #include <BLEUtils.h>
 
 #include "energy/EnergyAccumulator.h"
+#include "alarm/AlarmSettings.h"
 #include "measurement/CalibrationSettings.h"
+#include "ota/FirmwareUpdateService.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
 
 class BleTelemetryService
 {
 public:
+    enum class ControlResult : uint8_t {
+        Applied = 1,
+        Rejected = 2,
+        Failed = 3,
+    };
+
     BleTelemetryService();
 
-    void begin();
+    void begin(FirmwareUpdateService& firmwareUpdate);
     void publish(const TelemetryStore& store, const EnergyTotals& energy,
                  const Ina228Sensor& sensor, const CurrentCalibration& calibration,
+                 const DeviceAlarmSettings& alarms, const DeviceAlarmState& alarmState,
                  bool calibrationStored, bool displayOn, bool accessPointReady,
                  const char* resetReason, uint8_t wifiClients);
     void maintain();
 
-    bool consumeResetExtremaRequested();
-    bool consumeSessionResetRequested();
-    bool consumeDisplayToggleRequested();
-    bool consumeCalibrationSaveRequested(CurrentCalibration& calibration);
-    bool consumeCalibrationResetRequested();
+    bool consumeResetExtremaRequested(uint16_t& requestId);
+    bool consumeSessionResetRequested(uint16_t& requestId);
+    bool consumeDisplayToggleRequested(uint16_t& requestId);
+    bool consumeCalibrationSaveRequested(CurrentCalibration& calibration, uint16_t& requestId);
+    bool consumeCalibrationResetRequested(uint16_t& requestId);
+    bool consumeAlarmSaveRequested(DeviceAlarmSettings& settings, uint16_t& requestId);
+    void reportControlResult(uint8_t command, uint16_t requestId, ControlResult result);
 
     bool connected() const { return connected_.load(); }
     bool advertising() const { return advertising_.load(); }
@@ -56,13 +67,25 @@ private:
         BleTelemetryService& owner_;
     };
 
+    class FirmwareTransferCallbacks : public BLECharacteristicCallbacks
+    {
+    public:
+        explicit FirmwareTransferCallbacks(BleTelemetryService& owner) : owner_(owner) {}
+        void onWrite(BLECharacteristic* characteristic) override;
+
+    private:
+        BleTelemetryService& owner_;
+    };
+
     enum class PendingCommand : uint8_t {
         None,
         ResetExtrema,
         ResetSession,
         ToggleDisplay,
         SaveCalibration,
-        ResetCalibration
+        ResetCalibration,
+        SaveAlarms,
+        Writing = 255
     };
 
     static BLECharacteristic* createCharacteristic(
@@ -83,12 +106,16 @@ private:
         bool notify
     );
     static BLECharacteristic* createControlCharacteristic(BLEService* service);
+    static BLECharacteristic* createControlStatusCharacteristic(BLEService* service);
+    static BLECharacteristic* createFirmwareTransferCharacteristic(BLEService* service);
     void startAdvertising();
     void publishDashboardPackets(
         const TelemetryStore& store,
         const EnergyTotals& energy,
         const Ina228Sensor& sensor,
         const CurrentCalibration& calibration,
+        const DeviceAlarmSettings& alarms,
+        const DeviceAlarmState& alarmState,
         bool calibrationStored,
         bool displayOn,
         bool accessPointReady,
@@ -96,10 +123,14 @@ private:
         uint8_t wifiClients,
         bool notify
     );
-    bool consumeCommand(PendingCommand command);
+    void publishFirmwareUpdateStatus(bool notify);
+    void publishControlStatus(bool notify);
+    bool consumeCommand(PendingCommand command, uint16_t& requestId);
 
     ServerCallbacks callbacks_;
     ControlCallbacks controlCallbacks_;
+    FirmwareTransferCallbacks firmwareTransferCallbacks_;
+    FirmwareUpdateService* firmwareUpdate_ = nullptr;
     BLEServer* server_ = nullptr;
     BLECharacteristic* voltageCharacteristic_ = nullptr;
     BLECharacteristic* currentCharacteristic_ = nullptr;
@@ -112,15 +143,29 @@ private:
     BLECharacteristic* binaryTelemetryCharacteristic_ = nullptr;
     BLECharacteristic* dashboardCharacteristic_ = nullptr;
     BLECharacteristic* controlCharacteristic_ = nullptr;
+    BLECharacteristic* controlStatusCharacteristic_ = nullptr;
+    BLECharacteristic* deviceInfoCharacteristic_ = nullptr;
+    BLECharacteristic* firmwareTransferCharacteristic_ = nullptr;
+    BLECharacteristic* firmwareUpdateStatusCharacteristic_ = nullptr;
 
     std::atomic_bool connected_{false};
     std::atomic_bool advertising_{false};
     std::atomic_bool connectionStateChanged_{false};
     std::atomic_bool advertisingRestartRequested_{false};
     std::atomic_uint8_t pendingCommand_{static_cast<uint8_t>(PendingCommand::None)};
+    std::atomic_uint16_t pendingRequestId_{0};
     std::atomic_int32_t pendingResistanceMicroOhms_{0};
     std::atomic_int32_t pendingOffsetNanoVolts_{0};
     std::atomic_int32_t pendingGainPpm_{0};
+    std::atomic_uint8_t pendingAlarmFlags_{0};
+    std::atomic_int32_t pendingLowVoltageMv_{0};
+    std::atomic_int32_t pendingHighVoltageMv_{0};
+    std::atomic_int32_t pendingCurrentMa_{0};
+    std::atomic_int32_t pendingTemperatureDeciC_{0};
+    std::atomic_uint8_t controlStatusCommand_{0};
+    std::atomic_uint16_t controlStatusRequestId_{0};
+    std::atomic_uint8_t controlStatusResult_{0};
+    std::atomic_bool controlStatusDirty_{false};
     uint8_t dashboardPacketIndex_ = 0;
     bool loggedConnected_ = false;
 };

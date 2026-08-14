@@ -22,7 +22,7 @@
  buttons ───────────────────────────────────────────> App (display toggle / extrema reset)
 ```
 
-`BatteryMonitorApp` owns the scheduler and subsystem instances. It assigns the sequence number and `millis()` timestamp after every sensor polling attempt, then writes the snapshot to `TelemetryStore` and `EnergyAccumulator`. This establishes one ordering and time base for energy integration.
+`BatteryMonitorApp` owns the scheduler and subsystem instances. It assigns the sequence number and `millis()` timestamp after every sensor polling attempt, then supplies the snapshot to `TelemetryStore`, `EnergyAccumulator` and `AlarmMonitor`. This establishes one ordering and time base for extrema, energy integration and alarm evaluation.
 
 ## Telemetry contract
 
@@ -59,13 +59,33 @@ submits validated requests, but `BatteryMonitorApp` is the only component that
 saves or clears a profile, updates `Ina228Sensor`, and starts a fresh session.
 This preserves a single defined boundary between calibration profiles.
 
+### `AlarmSettings` and `AlarmMonitor`
+
+`AlarmSettings` owns one versioned, validated NVS alarm profile: low and high
+voltage, absolute current, die temperature and sensor-health limits.
+`AlarmMonitor` evaluates the latest valid sample against that profile and
+publishes alarm state with the shared telemetry. Web and BLE requests are
+validated and applied by `BatteryMonitorApp`, which persists settings before
+returning a control result. Alarms never perform a hardware read or maintain a
+second sample cache.
+
 ### `TelemetryStore`
 
 Owns the latest snapshot and extrema. It updates each statistic only with a finite valid value. The web min/max action calls `resetExtrema()` directly; the physical reset calls the application-level session reset, which includes extrema and Ah/Wh totals.
 
 ### Presentation and transport components
 
-`OledDisplay`, `BleTelemetryService` and `WebDashboard` consume stored state only. `WebDashboard` also owns SoftAP/HTTP and JSON serialization; `BleTelemetryService` owns GATT and advertising state, including the documented binary mobile-app telemetry contract. Neither performs I2C work or retains a competing measurement cache.
+`OledDisplay`, `BleTelemetryService` and `WebDashboard` consume stored state only. `WebDashboard` also owns SoftAP/HTTP and JSON serialization; `BleTelemetryService` owns GATT, advertising state and the documented binary mobile-app telemetry contract. BLE control writes are queued for the application loop and return a request-ID-matched result on `control1`. Neither transport performs I2C work or retains a competing measurement cache.
+
+### `FirmwareUpdateService`
+
+Owns the ESP32 inactive-partition writer for the BLE transfer protocol. It only
+accepts strictly ordered chunks and verifies byte count, CRC-32 and the ESP32
+image before asking `BatteryMonitorApp` to restart. BLE owns the GATT callback;
+the application owns the actual reboot. The Web Dashboard keeps its HTTP upload
+adapter, but both routes claim the same update writer lock, so an active route
+causes the other to fail safely. A verified BLE status remains available for a
+short grace period before the application restarts.
 
 ### `DebouncedButton`
 
@@ -82,6 +102,7 @@ The headers under `include/future/` are planning markers, not active interfaces 
 - `SettingsStore` owns validated, versioned NVS configuration.
 - `TelemetryHistory` consumes snapshots through a bounded buffer/decimation policy.
 - `Ds18b20Sensor` is an optional, independent temperature source.
-- `OtaService` is isolated from the polling path and requires authentication.
+- Signed/authenticated OTA policy is a future hardening layer over the active
+  `FirmwareUpdateService` and Web upload paths.
 
 The ordering and acceptance criteria live in [ROADMAP.md](ROADMAP.md).

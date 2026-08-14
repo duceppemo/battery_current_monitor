@@ -40,7 +40,7 @@ void OledDisplay::toggle()
     setOn(!on_);
 }
 
-void OledDisplay::showStartup()
+void OledDisplay::showStartup(const char* firmwareVersion)
 {
     if (!on_) {
         return;
@@ -63,9 +63,13 @@ void OledDisplay::showStartup()
     oled_.setFont(u8g2_font_5x8_tf);
     drawCentered(REVISION_AND_RATING, 24);
     oled_.drawHLine(4, 30, 120);
-    oled_.setFont(u8g2_font_6x12_tf);
-    drawCentered(HARDWARE, 45);
-    drawCentered(STARTING, 60);
+    oled_.setFont(u8g2_font_5x8_tf);
+    drawCentered(HARDWARE, 42);
+    char firmware[24];
+    snprintf(firmware, sizeof(firmware), "Firmware v%s",
+             firmwareVersion != nullptr ? firmwareVersion : "?");
+    drawCentered(firmware, 52);
+    drawCentered(STARTING, 62);
     oled_.sendBuffer();
     invalidateFrame();
 }

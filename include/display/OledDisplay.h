@@ -12,7 +12,7 @@ public:
     OledDisplay();
 
     void begin();
-    void showStartup();
+    void showStartup(const char* firmwareVersion);
     void showMeasurements(
         const TelemetryStore& store,
         const EnergyTotals& energy,

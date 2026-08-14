@@ -4,6 +4,15 @@
 
 namespace Config
 {
+    // Keep the release version in one place. The preprocessor string literal is
+    // also embedded in OTA images for the dashboard's selected-file check.
+#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.1"
+    constexpr char FIRMWARE_VERSION[] = BATTERY_MONITOR_FIRMWARE_VERSION;
+    // Deliberately retained in the application image so the Web Dashboard can
+    // identify a selected OTA .bin before it is written to the inactive slot.
+    constexpr char FIRMWARE_IMAGE_MARKER[] = "BMFW:" BATTERY_MONITOR_FIRMWARE_VERSION;
+    constexpr char HARDWARE_REVISION[] = "Rev A";
+
     // I2C: XIAO ESP32-C3 D4/D5
     constexpr uint8_t SDA_PIN = 6;
     constexpr uint8_t SCL_PIN = 7;
@@ -32,6 +41,8 @@ namespace Config
     constexpr uint32_t MAX_ENERGY_INTEGRATION_GAP_MS = MEASUREMENT_INTERVAL_MS * 3;
     constexpr uint32_t DISPLAY_INTERVAL_MS = 500;
     constexpr uint32_t BLE_INTERVAL_MS = 1000;
+    // Leave BLE time to deliver the verified OTA status before reset.
+    constexpr uint32_t BLE_OTA_RESTART_GRACE_MS = 2000;
     // Diagnostics must remain harmless when no USB serial client is attached.
     constexpr uint32_t SERIAL_INTERVAL_MS = 5000;
 

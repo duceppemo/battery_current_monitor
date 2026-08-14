@@ -23,9 +23,10 @@ Each poll produces a self-contained `Telemetry` snapshot. It includes a monotoni
 
 The current implementation uses firmware-side trapezoidal integration. Positive
 current/power means **battery discharge**. Counters are intentionally
-session-only and reset after a power cycle. The web UI can reset energy without
-resetting extrema; the single physical reset button clears both energy and
-extrema, with a dedicated application hook for future session stores. Signed
+session-only and reset after a power cycle. The Web Dashboard and Flutter app
+can reset energy without resetting extrema; the single physical reset button
+clears both energy and extrema, with a dedicated application hook for future
+session stores. Signed
 (`netAh`, `netWh`) and directional charge/discharge totals are available from
 JSON and BLE.
 
@@ -45,7 +46,7 @@ JSON and BLE.
 ## Phase 2 — Configuration and measurement quality
 
 1. [x] Add an explicit INA228 configuration module: continuous conversion, 16-sample averaging, 1.052 ms conversion time and wide `ADCRANGE` are written, read back and reported.
-2. [x] Add NVS-backed settings with schema versioning, defaults and validation for shunt resistance, current offset and gain calibration. The guided dashboard flow saves and restores the profile explicitly.
+2. [x] Add NVS-backed settings with schema versioning, defaults and validation for shunt resistance, current offset and gain calibration, plus the monitor alarm profile. The guided dashboard flow saves and restores calibration explicitly.
 3. [x] Add a guided zero-current/reference-current calibration flow. It rejects invalid resistance, offset and gain ranges; the operator must still record test conditions with the reference instrument.
 4. Define filtering separately from raw measurement acquisition. Preserve raw samples for diagnostics; use filtered values only where explicitly chosen.
 
@@ -55,16 +56,17 @@ JSON and BLE.
 
 1. Move from the breakout's R015 shunt to the planned 100 A / 50 mV (0.5 mOhm) Kelvin shunt only after confirming wiring, polarity and safe common-mode conditions.
 2. Update the configured nominal resistance and repeat the Phase 1 validation.
-3. Add an optional DS18B20 shunt-temperature driver and independent thermal warning/alarm policy.
+3. [x] Add persistent monitor alarms for low/high voltage, absolute current, die temperature and sensor-health status.
+4. Add an optional DS18B20 shunt-temperature driver and independent shunt thermal warning/alarm policy.
 
 **Done when:** electrical and thermal readings are validated under load, and a missing optional temperature sensor degrades only its own feature.
 
 ## Phase 4 — History, persistence and networking
 
 1. [x] Define and implement a fixed-size, versioned Binary Telemetry v1 BLE characteristic for a mobile app. Keep the existing text characteristics for diagnostics and generic BLE tools.
-2. Build the Flutter companion app: service-filtered scan, connection lifecycle, binary-telemetry decoding and a live dashboard.
-3. Add a bounded RAM history buffer with an explicit sample-decimation policy.
-4. Add CSV export; only then consider bounded LittleFS persistence and wear limits.
+2. [x] Build the Flutter companion app: service-filtered scan, connection lifecycle, binary-telemetry decoding, controls, calibration, alarms and a live dashboard.
+3. [x] Add an app-local bounded session history buffer with an explicit 7,200-entry retention policy and trend views.
+4. [x] Add user-approved CSV export from the app-local session log. Consider bounded LittleFS persistence and wear limits only as a separate device-side feature.
 5. Make session-counter persistence opt-in and crash-safe.
 6. Add configurable Wi-Fi station/AP modes, credentials and mDNS.
 
@@ -72,9 +74,13 @@ JSON and BLE.
 
 ## Phase 5 — Serviceability
 
-1. Add build metadata and a diagnostics page.
-2. Add authenticated OTA with a documented recovery path.
-3. Add a release checklist covering build, flash, I2C discovery, calibration, web/BLE compatibility and OTA rollback.
+1. [x] Add build metadata and diagnostics: firmware version, hardware revision and advertised BLE capabilities are exposed to Web and BLE clients.
+2. [x] Add local Web Dashboard `.bin` upload and a BLE transfer path with
+   sequential offsets, CRC-32 and ESP32 image validation. Keep the Web path as
+   recovery while the app downloads release assets before joining the monitor.
+3. Add signed/authenticated OTA with a documented recovery path. CRC-32 is an
+   integrity check, not an authenticity guarantee.
+4. [x] Add a release checklist covering build, flash, I2C discovery, calibration, web/BLE compatibility and OTA rollback.
 
 ## Non-goals until earlier phases pass
 

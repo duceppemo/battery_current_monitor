@@ -3,8 +3,10 @@
 #include <Arduino.h>
 #include <WebServer.h>
 
+#include "alarm/AlarmSettings.h"
 #include "energy/EnergyAccumulator.h"
 #include "measurement/CalibrationSettings.h"
+#include "ota/FirmwareUpdateService.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
 
@@ -15,13 +17,17 @@ public:
         TelemetryStore& store,
         const EnergyTotals& energyTotals,
         const Ina228Sensor& sensor,
-        const CalibrationSettings& calibration
+        const CalibrationSettings& calibration,
+        const AlarmSettings& alarms,
+        const AlarmMonitor& alarmMonitor,
+        FirmwareUpdateService& firmwareUpdate
     );
     void update();
     bool consumeDisplayToggleRequested();
     bool consumeSessionResetRequested();
     bool consumeCalibrationSaveRequested(CurrentCalibration& calibration);
     bool consumeCalibrationResetRequested();
+    bool consumeAlarmSaveRequested(DeviceAlarmSettings& settings);
     void setCalibrationStatus(const char* status);
 
     void setRuntimeStatus(
@@ -43,7 +49,8 @@ private:
         ToggleDisplay,
         ResetSession,
         SaveCalibration,
-        ResetCalibration
+        ResetCalibration,
+        SaveAlarms
     };
 
     void handleRoot();
@@ -53,6 +60,8 @@ private:
     void handleToggleDisplay();
     void handleCalibrationSave();
     void handleCalibrationReset();
+    void handleAlarmSave();
+    void handleFirmwareUpload();
     void handleNotFound();
     bool startAccessPoint();
     void maintainAccessPoint(uint32_t nowMs);
@@ -81,6 +90,9 @@ private:
     const EnergyTotals* energyTotals_ = nullptr;
     const Ina228Sensor* sensor_ = nullptr;
     const CalibrationSettings* calibration_ = nullptr;
+    const AlarmSettings* alarms_ = nullptr;
+    const AlarmMonitor* alarmMonitor_ = nullptr;
+    FirmwareUpdateService* firmwareUpdate_ = nullptr;
     String telemetryJson_;
 
     bool running_ = false;
@@ -92,7 +104,11 @@ private:
     uint32_t lastAccessPointCheckMs_ = 0;
     PendingCommand pendingCommand_ = PendingCommand::None;
     CurrentCalibration pendingCalibration_;
+    DeviceAlarmSettings pendingAlarms_;
     char calibrationStatus_[48] = "unchanged";
     uint32_t successfulSamples_ = 0;
     uint32_t failedSamples_ = 0;
+    bool firmwareUpdateSucceeded_ = false;
+    char firmwareUpdateError_[64] = "";
+    uint32_t restartAfterMs_ = 0;
 };

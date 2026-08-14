@@ -15,8 +15,8 @@ Binary Telemetry characteristic instead:
 7d9f0009-9c65-4d3d-bdd5-8f4c6b2e1000
 ```
 
-It supports `Read` and `Notify`. Firmware updates it after each completed
-measurement pass (currently every 500 ms). It is a fixed 20-byte little-endian
+It supports `Read` and `Notify`. Firmware publishes it on the one-second BLE
+cadence after completed measurements. It is a fixed 20-byte little-endian
 packet, deliberately small enough to fit in the initial BLE ATT notification
 payload. The app therefore must not rely on MTU negotiation for live telemetry.
 
@@ -74,8 +74,9 @@ The companion app also subscribes to the Dashboard Data characteristic:
 ```
 
 It supports `Read` and `Notify`. Each notification is one 20-byte
-little-endian page. Firmware rotates through the pages once per BLE update, so
-the app has a complete dashboard within roughly three seconds after connecting.
+little-endian page. Firmware rotates through six pages once per one-second BLE
+update, so the app has a complete dashboard within roughly six seconds after
+connecting.
 The live Binary Telemetry v1 characteristic remains the authoritative fast
 live-data stream.
 
@@ -108,3 +109,86 @@ the app observes the resulting state on the next dashboard page.
 | `3` | none | Toggle the OLED display. |
 | `4` | 12 bytes after command: `u32` resistance micro-ohms, `int32` offset nanovolts, `int32` gain ppm | Validate and store calibration, then reset session values. |
 | `5` | none | Restore compile-time default calibration, then reset session values. |
+| `6` | flags, low/high voltage in mV, current in mA, temperature in deci-C | Save persistent monitor alarm thresholds. Flags: bit 0 low voltage, bit 1 high voltage, bit 2 absolute current, bit 3 temperature, bit 4 sensor health. |
+
+Every app-originated command appends a `u16` request ID. A command is not
+considered successful until its matching Control Result notification reports
+that the monitor applied it; a BLE write response only confirms receipt.
+
+### Control Result v1
+
+The companion app subscribes to this read/notify characteristic before writing
+a control command:
+
+```text
+7d9f000f-9c65-4d3d-bdd5-8f4c6b2e1000
+```
+
+Its fixed six-byte packet is: protocol version (`1`), command byte, `u16`
+request ID, result (`0` idle, `1` applied, `2` rejected because another command
+is pending, `3` failed to persist), and one reserved byte. Older clients may
+omit the request ID and receive status with ID zero.
+
+## Device Information
+
+The readable device-information characteristic is:
+
+```text
+7d9f000c-9c65-4d3d-bdd5-8f4c6b2e1000
+```
+
+Its UTF-8 value is a semicolon-separated diagnostic string, currently
+`FW=<firmware-version>;HW=<hardware-revision>;BLE=telemetry1,dashboard1,ota1,control1`.
+Clients must ignore unknown keys so information can be added without a protocol
+break.
+
+## Firmware Transfer v1
+
+Firmware version 0.5.1 and later exposes a sequential, checksummed BLE update
+transport. It is intended for the companion app after it has downloaded a
+release asset while the phone still has internet access. The Web Dashboard's
+local `.bin` upload remains available as a recovery path.
+
+The app must enable this path only when Device Information includes `ota1`.
+
+### Transfer characteristic
+
+Write-with-response characteristic:
+
+```text
+7d9f000d-9c65-4d3d-bdd5-8f4c6b2e1000
+```
+
+All multi-byte fields are little-endian. A transfer is strictly sequential;
+the monitor rejects duplicate, missing or out-of-order data frames.
+
+| Command | Frame | Meaning |
+| ---: | --- | --- |
+| `0xA0` | command, `u32` image size, `u32` IEEE CRC-32 | Start a new image. The checksum covers the complete raw `.bin` asset. |
+| `0xA1` | command, `u32` offset, 1..N bytes image data | Write one image chunk at exactly the next expected offset. |
+| `0xA2` | command only | Finish. The monitor checks size, CRC-32 and ESP32 image verification before scheduling a reboot. |
+| `0xA3` | command only | Abort and discard the inactive-partition image. |
+
+The companion app requests an enlarged MTU when the platform allows it, limits
+data frames to 180 bytes, and uses write-with-response for every frame. Do not
+start another control operation while a transfer is active. Keep the app in
+the foreground and keep monitor power connected.
+
+### Firmware Update Status v1
+
+Read/Notify characteristic:
+
+```text
+7d9f000e-9c65-4d3d-bdd5-8f4c6b2e1000
+```
+
+It is always a 12-byte packet: protocol version at byte 0 (`1`), state at byte
+1 (`0` idle, `1` receiving, `2` verified, `3` error), received/expected byte
+counts as `u32` at offsets 2/6, error code at byte 10, reserved byte 11. Error
+codes are: `1` start, `2` sequence, `3` flash write, `4` CRC-32, `5` final
+image verification. A `verified` status is sent, then the monitor waits two
+seconds before rebooting so the central can receive it.
+
+CRC-32 detects transfer corruption; it is not a cryptographic signature. Only
+install release assets you trust. Signed/authenticated update policy remains a
+future hardening task.
