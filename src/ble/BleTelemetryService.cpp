@@ -66,6 +66,39 @@ namespace
     constexpr size_t FIRMWARE_UPDATE_STATUS_SIZE = 12;
     constexpr size_t CONTROL_STATUS_SIZE = 6;
 
+    // GATT attribute handle budget for the service below. Each NOTIFY
+    // characteristic costs 4 handles (declaration + value + auto CCCD +
+    // User Description descriptor); each write-only one costs 3 (no CCCD).
+    // These counts must match the createCharacteristic()/create*Characteristic()
+    // calls in begin() below. This is inherently a hand-maintained tally, not
+    // a build-time guarantee, so verifyCharacteristicsRegistered() is the
+    // actual safety net: it checks every characteristic's live GATT handle
+    // after registration and fails loudly if this budget was ever wrong.
+    constexpr uint32_t HANDLES_PER_NOTIFY_CHARACTERISTIC = 4;
+    constexpr uint32_t HANDLES_PER_WRITE_ONLY_CHARACTERISTIC = 3;
+    constexpr uint32_t NOTIFY_CHARACTERISTIC_COUNT = 13;
+    constexpr uint32_t WRITE_ONLY_CHARACTERISTIC_COUNT = 2;
+    constexpr uint32_t SERVICE_HANDLE_HEADROOM = 20;
+    constexpr uint32_t SERVICE_HANDLE_COUNT =
+        1 + // service declaration
+        NOTIFY_CHARACTERISTIC_COUNT * HANDLES_PER_NOTIFY_CHARACTERISTIC +
+        WRITE_ONLY_CHARACTERISTIC_COUNT * HANDLES_PER_WRITE_ONLY_CHARACTERISTIC +
+        SERVICE_HANDLE_HEADROOM;
+    constexpr uint16_t INVALID_GATT_HANDLE = 0xFFFF;
+
+    bool verifyCharacteristicRegistered(const char* name, BLECharacteristic* characteristic)
+    {
+        if (characteristic == nullptr || characteristic->getHandle() == INVALID_GATT_HANDLE) {
+            Serial.printf(
+                "ERROR: BLE characteristic '%s' failed to register "
+                "(GATT handle table exhausted?).\n",
+                name
+            );
+            return false;
+        }
+        return true;
+    }
+
     int32_t roundAndClamp(float value, float scale, int32_t minimum, int32_t maximum)
     {
         if (!std::isfinite(value)) {
@@ -260,14 +293,11 @@ void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
     server_->setCallbacks(&callbacks_);
 
     // The default single-argument overload allocates only 15 GATT attribute
-    // handles. This service defines 15 characteristics (most READ|NOTIFY
-    // with an auto-added CCCD plus a User Description descriptor, so 4
-    // handles each; two write-only ones need 3), needing ~59 handles total
-    // plus one for the service declaration. Anything created once the
-    // default table fills up (starting around "temperature") never actually
-    // registers in the live GATT database, even though the local
-    // BLECharacteristic object still exists and looks fine to firmware.
-    BLEService* service = server_->createService(BLEUUID(SERVICE_UUID), 80, 0);
+    // handles, far fewer than SERVICE_HANDLE_COUNT needs. Anything created
+    // once a too-small table fills up never actually registers in the live
+    // GATT database, even though the local BLECharacteristic object still
+    // exists and looks fine to firmware.
+    BLEService* service = server_->createService(BLEUUID(SERVICE_UUID), SERVICE_HANDLE_COUNT, 0);
 
     voltageCharacteristic_ = createCharacteristic(service, VOLTAGE_UUID, "Battery Voltage (V)");
     currentCharacteristic_ = createCharacteristic(service, CURRENT_UUID, "Current (A)");
@@ -321,6 +351,31 @@ void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
     deviceInfoCharacteristic_->setValue(deviceInfo);
 
     service->start();
+
+    // & (not &&) so every characteristic is checked and logged even if an
+    // earlier one already failed, rather than short-circuiting.
+    const bool allCharacteristicsRegistered =
+        verifyCharacteristicRegistered("voltage", voltageCharacteristic_) &
+        verifyCharacteristicRegistered("current", currentCharacteristic_) &
+        verifyCharacteristicRegistered("power", powerCharacteristic_) &
+        verifyCharacteristicRegistered("temperature", temperatureCharacteristic_) &
+        verifyCharacteristicRegistered("ampHour", ampHourCharacteristic_) &
+        verifyCharacteristicRegistered("wattHour", wattHourCharacteristic_) &
+        verifyCharacteristicRegistered("status", statusCharacteristic_) &
+        verifyCharacteristicRegistered("telemetry", telemetryCharacteristic_) &
+        verifyCharacteristicRegistered("binaryTelemetry", binaryTelemetryCharacteristic_) &
+        verifyCharacteristicRegistered("dashboard", dashboardCharacteristic_) &
+        verifyCharacteristicRegistered("control", controlCharacteristic_) &
+        verifyCharacteristicRegistered("controlStatus", controlStatusCharacteristic_) &
+        verifyCharacteristicRegistered("deviceInfo", deviceInfoCharacteristic_) &
+        verifyCharacteristicRegistered("firmwareTransfer", firmwareTransferCharacteristic_) &
+        verifyCharacteristicRegistered("firmwareUpdateStatus", firmwareUpdateStatusCharacteristic_);
+    if (!allCharacteristicsRegistered) {
+        Serial.println(
+            "ERROR: one or more BLE characteristics failed to register; "
+            "increase SERVICE_HANDLE_COUNT in BleTelemetryService.cpp."
+        );
+    }
 
     startAdvertising();
 }

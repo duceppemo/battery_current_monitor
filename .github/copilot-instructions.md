@@ -17,13 +17,14 @@ BLE protocol, control or OTA change, update and cross-check both repositories.
 - Every NOTIFY characteristic needs an explicit `BLE2902` CCCD descriptor
   added via `addDescriptor()`; this library never adds one automatically, and
   without it a central cannot enable notifications on that characteristic.
-  When adding characteristics, also account for GATT attribute handles:
-  `createService(uuid)` defaults to only 15 handles, and a NOTIFY
-  characteristic with a CCCD and a User Description descriptor costs 4 each
-  (write-only ones cost 3) — pass an explicit, generous `numHandles` via
-  `createService(BLEUUID(uuid), numHandles, 0)` once the service holds more
-  than a couple of characteristics. Keep JSON float formatting types explicit
-  for Arduino-ESP32 compatibility.
+  When adding or removing a characteristic in `BleTelemetryService.cpp`,
+  update `NOTIFY_CHARACTERISTIC_COUNT`/`WRITE_ONLY_CHARACTERISTIC_COUNT`
+  (feeding `SERVICE_HANDLE_COUNT`, which replaces `createService`'s default
+  15-handle allocation) and add/remove its `verifyCharacteristicRegistered()`
+  call after `service->start()` — that check is what turns a wrong handle
+  budget into a loud boot-time error instead of a characteristic silently
+  missing from the live GATT database. Keep JSON float formatting types
+  explicit for Arduino-ESP32 compatibility.
 - Apply BLE dashboard commands on the application loop. App-originated
   commands include a request ID and must return an explicit Control Result;
   write success alone is not command success.
