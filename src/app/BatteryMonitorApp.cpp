@@ -8,6 +8,32 @@
 
 namespace
 {
+    // Survives any reset that doesn't remove power (including the reset the
+    // native USB peripheral triggers just from a host opening the port), but
+    // not a real power-off. Lets the *next* boot report exactly how far a
+    // stuck prior boot got, since a live serial attach can't observe it
+    // directly without itself resetting the board.
+    RTC_NOINIT_ATTR uint32_t bootCheckpointMagic;
+    RTC_NOINIT_ATTR uint32_t bootCheckpoint;
+    constexpr uint32_t BOOT_CHECKPOINT_MAGIC = 0xB007C0DEu;
+
+    const char* checkpointName(uint32_t checkpoint)
+    {
+        switch (checkpoint) {
+        case 0: return "start";
+        case 1: return "I2C bus init";
+        case 2: return "I2C scan";
+        case 3: return "OLED init";
+        case 4: return "OLED splash drawn";
+        case 5: return "sensor init/identify";
+        case 6: return "sensor configured";
+        case 7: return "BLE init";
+        case 8: return "web/Wi-Fi init";
+        case 9: return "boot complete";
+        default: return "unknown";
+        }
+    }
+
     const char* resetReasonText(esp_reset_reason_t reason)
     {
         switch (reason) {
@@ -33,6 +59,40 @@ namespace
             Serial.write(reinterpret_cast<const uint8_t*>(message), length);
             Serial.write('\n');
         }
+    }
+
+    // A slave (OLED or INA228) can be caught mid-transaction if power is cut
+    // while it is holding SDA low; the bus then never recovers on its own on
+    // the next power-up, wedging every later Wire transaction. Bit-bang up to
+    // nine SCL pulses to walk a stuck slave through releasing the line, then
+    // issue a STOP, before Wire.begin() ever touches the pins.
+    void recoverI2CBus(uint8_t sdaPin, uint8_t sclPin)
+    {
+        pinMode(sdaPin, INPUT_PULLUP);
+        pinMode(sclPin, INPUT_PULLUP);
+        delayMicroseconds(10);
+
+        if (digitalRead(sdaPin) == HIGH) {
+            return;
+        }
+
+        pinMode(sclPin, OUTPUT);
+        for (uint8_t i = 0; i < 9 && digitalRead(sdaPin) == LOW; ++i) {
+            digitalWrite(sclPin, LOW);
+            delayMicroseconds(5);
+            digitalWrite(sclPin, HIGH);
+            delayMicroseconds(5);
+        }
+
+        digitalWrite(sclPin, HIGH);
+        pinMode(sdaPin, OUTPUT);
+        digitalWrite(sdaPin, LOW);
+        delayMicroseconds(5);
+        digitalWrite(sdaPin, HIGH);
+        delayMicroseconds(5);
+
+        pinMode(sdaPin, INPUT_PULLUP);
+        pinMode(sclPin, INPUT_PULLUP);
     }
 }
 
@@ -67,24 +127,41 @@ void BatteryMonitorApp::begin()
     Serial.println(" Modular architecture");
     Serial.println("================================");
     Serial.printf("Reset reason: %s\n", resetReason_);
+    if (bootCheckpointMagic == BOOT_CHECKPOINT_MAGIC) {
+        Serial.printf(
+            "Previous boot's last checkpoint: %lu (%s)\n",
+            static_cast<unsigned long>(bootCheckpoint),
+            checkpointName(bootCheckpoint)
+        );
+    } else {
+        Serial.println("Previous boot checkpoint: none (cold RTC memory).");
+    }
+    bootCheckpointMagic = BOOT_CHECKPOINT_MAGIC;
+    bootCheckpoint = 0;
 
     resetExtremaButton_.begin();
     displayToggleButton_.begin();
 
+    recoverI2CBus(Config::SDA_PIN, Config::SCL_PIN);
     Wire.begin(Config::SDA_PIN, Config::SCL_PIN);
     Wire.setClock(Config::I2C_CLOCK_HZ);
     Wire.setTimeOut(50);
+    bootCheckpoint = 1;
 
     delay(100);
     scanI2C();
+    bootCheckpoint = 2;
 
     display_.begin();
     Wire.setClock(Config::I2C_CLOCK_HZ);
+    bootCheckpoint = 3;
     display_.showStartup(Config::FIRMWARE_VERSION);
+    bootCheckpoint = 4;
     delay(Config::SPLASH_SCREEN_DURATION_MS);
 
     sensor_.begin(Wire);
     sensor_.identify();
+    bootCheckpoint = 5;
     calibration_.begin();
     alarms_.begin();
     sensor_.setCalibration(calibration_.current());
@@ -101,6 +178,7 @@ void BatteryMonitorApp::begin()
     } else {
         Serial.println("WARNING: INA228 configuration verification failed.");
     }
+    bootCheckpoint = 6;
 
     Telemetry initial;
     sensor_.read(initial);
@@ -111,7 +189,9 @@ void BatteryMonitorApp::begin()
     energy_.update(initial);
 
     ble_.begin(firmwareUpdate_);
+    bootCheckpoint = 7;
     web_.begin(telemetry_, energy_.totals(), sensor_, calibration_, alarms_, alarmMonitor_, firmwareUpdate_);
+    bootCheckpoint = 8;
     web_.setCalibrationStatus(
         calibration_.loadedFromStorage() ? "stored calibration active"
                                          : "default calibration active"
@@ -133,6 +213,11 @@ void BatteryMonitorApp::begin()
         sensor_.failedSamples()
     );
 
+    // Defensive resync in case BLE/Wi-Fi radio bring-up disturbed the OLED
+    // (it has no dedicated hardware reset line here); cheap and harmless
+    // either way.
+    display_.begin();
+    Wire.setClock(Config::I2C_CLOCK_HZ);
     display_.showMeasurements(
         telemetry_,
         energy_.totals(),
@@ -140,6 +225,7 @@ void BatteryMonitorApp::begin()
         web_.clientCount(),
         sensor_.failedSamples()
     );
+    bootCheckpoint = 9;
 
     Serial.println();
     Serial.println("Battery monitor running.");

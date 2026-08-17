@@ -101,7 +101,12 @@ void WebDashboard::begin(
 
 bool WebDashboard::startAccessPoint()
 {
-    WiFi.mode(WIFI_AP_STA);
+    // Boot in single-radio AP mode unless a station is actually going to be
+    // used. WIFI_AP_STA draws more current during Wi-Fi/BLE bring-up, and on
+    // a cold power-on that extra inrush has been observed to glitch the
+    // SSD1309 (no hardware reset line) even though the ESP32 itself and the
+    // INA228 tolerate it fine.
+    WiFi.mode(wifiSettings_.configured() ? WIFI_AP_STA : WIFI_AP);
     if (!WiFi.softAP(Config::WIFI_AP_SSID, Config::WIFI_AP_PASSWORD)) {
         Serial.println("ERROR: Wi-Fi SoftAP failed.");
         accessPointReady_ = false;
@@ -130,6 +135,10 @@ void WebDashboard::update()
 void WebDashboard::startStation(uint32_t nowMs)
 {
     if (!wifiSettings_.configured()) return;
+
+    if (WiFi.getMode() != WIFI_AP_STA) {
+        WiFi.mode(WIFI_AP_STA);
+    }
 
     const WifiStationSettings& settings = wifiSettings_.current();
     if (mdnsReady_) {
