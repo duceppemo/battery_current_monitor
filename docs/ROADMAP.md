@@ -83,6 +83,28 @@ JSON and BLE.
    integrity check, not an authenticity guarantee.
 4. [x] Add a release checklist covering build, flash, I2C discovery, calibration, web/BLE compatibility and OTA rollback.
 
+## Phase 6 — Fuel gauge
+
+1. [x] Add a `BatteryProfile` (rated capacity, charged voltage) and a
+   coulomb-counted `StateOfChargeEstimator`, exposed on the OLED, Web
+   Dashboard and BLE app. Unlike the Phase 4 item 5 session-counter question
+   (still open — that's about the per-power-on-session Ah/Wh totals), this
+   fuel gauge is deliberately persisted across reboots from the start, since
+   an SoC/time-to-go that resets on every power cycle isn't useful; it
+   persists periodically (not every sample) to bound flash writes.
+2. [x] Resync to 100% automatically once voltage stays at or above the
+   profile's charged voltage with a tapering (near-zero) current for a
+   sustained period, or manually from Web/BLE. Time-to-go only applies while
+   net discharging, using a smoothed current average.
+3. Validate the coulomb-counted capacity and auto-sync behavior against a
+   real charge/discharge cycle once the planned 0.5 mOhm Kelvin shunt (Phase
+   3) is in place; the current 15 mOhm prototype shunt's accuracy hasn't been
+   validated under load yet.
+
+**Done when:** SoC and time-to-go read consistently across OLED, Web
+Dashboard and BLE app, survive a reboot, and a full-charge sync (auto or
+manual) reliably returns to 100%.
+
 ## Non-goals until earlier phases pass
 
 - Persisting energy counters before their accuracy and reset semantics are proven.

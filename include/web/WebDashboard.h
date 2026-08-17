@@ -5,6 +5,7 @@
 
 #include "alarm/AlarmSettings.h"
 #include "energy/EnergyAccumulator.h"
+#include "energy/StateOfChargeEstimator.h"
 #include "measurement/CalibrationSettings.h"
 #include "network/WifiSettings.h"
 #include "ota/FirmwareUpdateService.h"
@@ -21,7 +22,9 @@ public:
         const CalibrationSettings& calibration,
         const AlarmSettings& alarms,
         const AlarmMonitor& alarmMonitor,
-        FirmwareUpdateService& firmwareUpdate
+        FirmwareUpdateService& firmwareUpdate,
+        const BatteryProfile& batteryProfile,
+        const StateOfChargeEstimator& stateOfCharge
     );
     void update();
     bool consumeDisplayToggleRequested();
@@ -32,6 +35,8 @@ public:
     void setCalibrationStatus(const char* status);
     bool saveWifiSettings(const WifiStationSettings& settings);
     bool clearWifiSettings();
+    bool consumeBatteryProfileSaveRequested(BatteryProfileSettings& settings);
+    bool consumeBatterySyncRequested();
 
     void setRuntimeStatus(
         bool bleConnected,
@@ -57,7 +62,9 @@ private:
         ResetSession,
         SaveCalibration,
         ResetCalibration,
-        SaveAlarms
+        SaveAlarms,
+        SaveBatteryProfile,
+        SyncBatteryFull
     };
 
     void handleRoot();
@@ -70,6 +77,8 @@ private:
     void handleAlarmSave();
     void handleWifiSave();
     void handleWifiClear();
+    void handleBatterySave();
+    void handleBatterySync();
     void handleFirmwareUpload();
     void handleNotFound();
     bool startAccessPoint();
@@ -105,6 +114,8 @@ private:
     const AlarmSettings* alarms_ = nullptr;
     const AlarmMonitor* alarmMonitor_ = nullptr;
     FirmwareUpdateService* firmwareUpdate_ = nullptr;
+    const BatteryProfile* batteryProfile_ = nullptr;
+    const StateOfChargeEstimator* stateOfCharge_ = nullptr;
     String telemetryJson_;
 
     bool running_ = false;
@@ -122,6 +133,7 @@ private:
     PendingCommand pendingCommand_ = PendingCommand::None;
     CurrentCalibration pendingCalibration_;
     DeviceAlarmSettings pendingAlarms_;
+    BatteryProfileSettings pendingBatteryProfile_;
     char calibrationStatus_[48] = "unchanged";
     uint32_t successfulSamples_ = 0;
     uint32_t failedSamples_ = 0;

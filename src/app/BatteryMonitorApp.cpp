@@ -164,6 +164,8 @@ void BatteryMonitorApp::begin()
     bootCheckpoint = 5;
     calibration_.begin();
     alarms_.begin();
+    batteryProfile_.begin();
+    stateOfCharge_.begin();
     sensor_.setCalibration(calibration_.current());
     const CurrentCalibration& activeCalibration = calibration_.current();
     Serial.printf(
@@ -187,10 +189,14 @@ void BatteryMonitorApp::begin()
     telemetry_.update(initial);
     alarmMonitor_.update(initial, alarms_.current());
     energy_.update(initial);
+    stateOfCharge_.update(initial, batteryProfile_.current(), initial.sampledAtMs);
 
     ble_.begin(firmwareUpdate_);
     bootCheckpoint = 7;
-    web_.begin(telemetry_, energy_.totals(), sensor_, calibration_, alarms_, alarmMonitor_, firmwareUpdate_);
+    web_.begin(
+        telemetry_, energy_.totals(), sensor_, calibration_, alarms_, alarmMonitor_,
+        firmwareUpdate_, batteryProfile_, stateOfCharge_
+    );
     bootCheckpoint = 8;
     web_.setCalibrationStatus(
         calibration_.loadedFromStorage() ? "stored calibration active"
@@ -223,7 +229,9 @@ void BatteryMonitorApp::begin()
         energy_.totals(),
         ble_.connected(),
         web_.clientCount(),
-        sensor_.failedSamples()
+        sensor_.failedSamples(),
+        stateOfCharge_.known(),
+        stateOfCharge_.percent(batteryProfile_.current())
     );
     bootCheckpoint = 9;
 
@@ -273,7 +281,9 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
                 energy_.totals(),
                 ble_.connected(),
                 web_.clientCount(),
-                sensor_.failedSamples()
+                sensor_.failedSamples(),
+                stateOfCharge_.known(),
+                stateOfCharge_.percent(batteryProfile_.current())
             );
         }
     }
@@ -288,7 +298,9 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
                 energy_.totals(),
                 ble_.connected(),
                 web_.clientCount(),
-                sensor_.failedSamples()
+                sensor_.failedSamples(),
+                stateOfCharge_.known(),
+                stateOfCharge_.percent(batteryProfile_.current())
             );
         }
     }
@@ -304,7 +316,9 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
                 energy_.totals(),
                 ble_.connected(),
                 web_.clientCount(),
-                sensor_.failedSamples()
+                sensor_.failedSamples(),
+                stateOfCharge_.known(),
+                stateOfCharge_.percent(batteryProfile_.current())
             );
         }
     }
@@ -334,7 +348,9 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
                 energy_.totals(),
                 ble_.connected(),
                 web_.clientCount(),
-                sensor_.failedSamples()
+                sensor_.failedSamples(),
+                stateOfCharge_.known(),
+                stateOfCharge_.percent(batteryProfile_.current())
             );
         }
     }
@@ -350,7 +366,9 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
                 energy_.totals(),
                 ble_.connected(),
                 web_.clientCount(),
-                sensor_.failedSamples()
+                sensor_.failedSamples(),
+                stateOfCharge_.known(),
+                stateOfCharge_.percent(batteryProfile_.current())
             );
         }
     }
@@ -393,6 +411,20 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         } else {
             logRuntimeEvent("Device alarm save from web UI failed.");
         }
+    }
+
+    BatteryProfileSettings requestedBatteryProfile;
+    if (web_.consumeBatteryProfileSaveRequested(requestedBatteryProfile)) {
+        if (batteryProfile_.save(requestedBatteryProfile)) {
+            logRuntimeEvent("Battery profile saved from web UI.");
+        } else {
+            logRuntimeEvent("Battery profile save from web UI failed.");
+        }
+    }
+
+    if (web_.consumeBatterySyncRequested()) {
+        stateOfCharge_.syncToFull(batteryProfile_.current());
+        logRuntimeEvent("Battery fuel gauge synced to full from web UI.");
     }
 
     if (ble_.consumeCalibrationSaveRequested(requestedCalibration, bleRequestId)) {
@@ -452,6 +484,22 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
             logRuntimeEvent("Wi-Fi station clear from BLE app failed.");
         }
     }
+
+    if (ble_.consumeBatteryProfileSaveRequested(requestedBatteryProfile, bleRequestId)) {
+        if (batteryProfile_.save(requestedBatteryProfile)) {
+            ble_.reportControlResult(9, bleRequestId, BleTelemetryService::ControlResult::Applied);
+            logRuntimeEvent("Battery profile saved from BLE app.");
+        } else {
+            ble_.reportControlResult(9, bleRequestId, BleTelemetryService::ControlResult::Failed);
+            logRuntimeEvent("Battery profile save from BLE app failed.");
+        }
+    }
+
+    if (ble_.consumeBatterySyncRequested(bleRequestId)) {
+        stateOfCharge_.syncToFull(batteryProfile_.current());
+        ble_.reportControlResult(10, bleRequestId, BleTelemetryService::ControlResult::Applied);
+        logRuntimeEvent("Battery fuel gauge synced to full from BLE app.");
+    }
 }
 
 void BatteryMonitorApp::resetPhysicalSessionState()
@@ -478,6 +526,7 @@ void BatteryMonitorApp::updateMeasurement(uint32_t nowMs)
     telemetry_.update(sample);
     alarmMonitor_.update(sample, alarms_.current());
     energy_.update(sample);
+    stateOfCharge_.update(sample, batteryProfile_.current(), completedAtMs);
 }
 
 void BatteryMonitorApp::updateDisplay(uint32_t nowMs)
@@ -493,7 +542,9 @@ void BatteryMonitorApp::updateDisplay(uint32_t nowMs)
         energy_.totals(),
         ble_.connected(),
         web_.clientCount(),
-        sensor_.failedSamples()
+        sensor_.failedSamples(),
+        stateOfCharge_.known(),
+        stateOfCharge_.percent(batteryProfile_.current())
     );
 }
 
@@ -521,7 +572,9 @@ void BatteryMonitorApp::updateBle(uint32_t nowMs)
         web_.stationConfigured(),
         web_.stationConnected(),
         web_.mdnsReady(),
-        stationIp
+        stationIp,
+        batteryProfile_.current(),
+        stateOfCharge_
     );
 }
 

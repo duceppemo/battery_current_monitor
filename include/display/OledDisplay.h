@@ -18,7 +18,9 @@ public:
         const EnergyTotals& energy,
         bool bleConnected,
         uint8_t wifiClients,
-        uint32_t failedSamples
+        uint32_t failedSamples,
+        bool socKnown,
+        float socPercent
     );
 
     void setOn(bool on);
@@ -37,7 +39,8 @@ private:
     static void formatEnergy(char* buffer, size_t size, float value, const char* label,
                              uint8_t decimals = 3);
     void showLivePage(const Telemetry& telemetry, const EnergyTotals& energy,
-                      bool bleConnected, uint8_t wifiClients, uint32_t failedSamples);
+                      bool bleConnected, uint8_t wifiClients, uint32_t failedSamples,
+                      bool socKnown, float socPercent);
     void showExtremaPage(const TelemetryStore& store);
     void drawPair(int baseline, const char* left, const char* right, int rightStart);
     void sendBufferIfChanged();

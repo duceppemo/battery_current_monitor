@@ -7,6 +7,7 @@
 #include "ble/BleTelemetryService.h"
 #include "display/OledDisplay.h"
 #include "energy/EnergyAccumulator.h"
+#include "energy/StateOfChargeEstimator.h"
 #include "input/DebouncedButton.h"
 #include "measurement/CalibrationSettings.h"
 #include "ota/FirmwareUpdateService.h"
@@ -38,6 +39,8 @@ private:
     AlarmMonitor alarmMonitor_;
     TelemetryStore telemetry_;
     EnergyAccumulator energy_;
+    BatteryProfile batteryProfile_;
+    StateOfChargeEstimator stateOfCharge_;
     OledDisplay display_;
     BleTelemetryService ble_;
     FirmwareUpdateService firmwareUpdate_;

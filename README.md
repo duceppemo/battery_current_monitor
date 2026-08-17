@@ -48,6 +48,9 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
   sample health counters
 - Session Ah / Wh accounting: positive current is discharge; totals reset on
   power cycle or through the Web Dashboard and Flutter app
+- Coulomb-counted state of charge and time-to-empty, persisted across
+  reboots, with auto and manual full-charge resync (separate from the
+  power-cycle-scoped session Ah/Wh above)
 - Min/max tracking for all measured/calculated metrics
 - Persistent low/high-voltage, current, temperature and sensor-health alarms
 - SSD1309 OLED
@@ -128,12 +131,15 @@ The dashboard shows live, minimum and maximum values for:
 - INA228 temperature
 - shunt voltage
 
-The dashboard also shows BLE, I2C, Wi-Fi-client and display status.
+The dashboard also shows BLE, I2C, Wi-Fi-client and display status, plus a
+battery fuel gauge card (state of charge and time-to-empty) once a battery
+profile is saved and synced to full at least once.
 
 It provides grouped controls beside the affected data: separate extrema and
-session-energy resets, OLED power, guided calibration, persistent alarm limits,
-home Wi-Fi setup and Web OTA. The update card shows both the installed firmware
-version and the version detected in a selected OTA image before upload.
+session-energy resets, OLED power, guided calibration, persistent alarm
+limits, battery profile setup and manual full-charge sync, home Wi-Fi setup
+and Web OTA. The update card shows both the installed firmware version and
+the version detected in a selected OTA image before upload.
 
 ## BLE
 

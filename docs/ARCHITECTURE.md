@@ -22,7 +22,7 @@
  buttons ───────────────────────────────────────────> App (display toggle / extrema reset)
 ```
 
-`BatteryMonitorApp` owns the scheduler and subsystem instances. It assigns the sequence number and `millis()` timestamp after every sensor polling attempt, then supplies the snapshot to `TelemetryStore`, `EnergyAccumulator` and `AlarmMonitor`. This establishes one ordering and time base for extrema, energy integration and alarm evaluation.
+`BatteryMonitorApp` owns the scheduler and subsystem instances. It assigns the sequence number and `millis()` timestamp after every sensor polling attempt, then supplies the snapshot to `TelemetryStore`, `EnergyAccumulator`, `AlarmMonitor` and `StateOfChargeEstimator`. This establishes one ordering and time base for extrema, energy integration, alarm evaluation and coulomb counting.
 
 ## Telemetry contract
 
@@ -68,6 +68,20 @@ publishes alarm state with the shared telemetry. Web and BLE requests are
 validated and applied by `BatteryMonitorApp`, which persists settings before
 returning a control result. Alarms never perform a hardware read or maintain a
 second sample cache.
+
+### `BatteryProfile` and `StateOfChargeEstimator`
+
+`BatteryProfile` owns one versioned NVS profile (rated capacity, charged
+voltage) analogous to `CalibrationSettings`/`AlarmSettings`. `StateOfChargeEstimator`
+coulomb-counts remaining amp-hours against that profile — unlike
+`EnergyAccumulator`'s per-power-on-session Ah/Wh (which intentionally resets
+every boot), this must survive reboots to be a useful fuel gauge, so it
+persists its running state to its own NVS namespace periodically (not on
+every sample, to bound flash writes) and has no notion of "correct" SoC until
+a full-charge sync happens — automatically (sustained voltage at or above the
+charged voltage with a tapering current) or manually from Web/BLE. Web and
+BLE profile-save/sync requests are validated and applied by
+`BatteryMonitorApp`, matching the calibration/alarm boundary.
 
 ### `TelemetryStore`
 

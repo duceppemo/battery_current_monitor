@@ -58,6 +58,7 @@ namespace
     constexpr uint8_t DASHBOARD_SHUNT = 0x15;
     constexpr uint8_t DASHBOARD_ALARMS = 0x16;
     constexpr uint8_t DASHBOARD_WIFI = 0x17;
+    constexpr uint8_t DASHBOARD_SOC = 0x18;
     constexpr uint8_t CONTROL_RESET_EXTREMA = 1;
     constexpr uint8_t CONTROL_RESET_SESSION = 2;
     constexpr uint8_t CONTROL_TOGGLE_DISPLAY = 3;
@@ -66,6 +67,8 @@ namespace
     constexpr uint8_t CONTROL_SAVE_ALARMS = 6;
     constexpr uint8_t CONTROL_SAVE_WIFI = 7;
     constexpr uint8_t CONTROL_CLEAR_WIFI = 8;
+    constexpr uint8_t CONTROL_SAVE_BATTERY_PROFILE = 9;
+    constexpr uint8_t CONTROL_SYNC_BATTERY_FULL = 10;
     constexpr size_t FIRMWARE_UPDATE_STATUS_SIZE = 12;
     constexpr size_t CONTROL_STATUS_SIZE = 6;
 
@@ -347,7 +350,7 @@ void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
     snprintf(
         deviceInfo,
         sizeof(deviceInfo),
-        "FW=%s;HW=%s;BLE=telemetry1,dashboard1,ota1,control1,wifi1",
+        "FW=%s;HW=%s;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1",
         Config::FIRMWARE_VERSION,
         Config::HARDWARE_REVISION
     );
@@ -450,7 +453,9 @@ void BleTelemetryService::publish(
     bool stationConfigured,
     bool stationConnected,
     bool mdnsReady,
-    const uint8_t stationIp[4])
+    const uint8_t stationIp[4],
+    const BatteryProfileSettings& batteryProfile,
+    const StateOfChargeEstimator& stateOfCharge)
 {
     const Telemetry& telemetry = store.current();
     const bool notify = connected();
@@ -531,7 +536,8 @@ void BleTelemetryService::publish(
                                sizeof(binaryTelemetry), notify);
     publishDashboardPackets(store, energy, sensor, calibration, alarms, alarmState, calibrationStored,
                             displayOn, accessPointReady, resetReason, wifiClients,
-                            stationConfigured, stationConnected, mdnsReady, stationIp, notify);
+                            stationConfigured, stationConnected, mdnsReady, stationIp,
+                            batteryProfile, stateOfCharge, notify);
 
     publishFirmwareUpdateStatus(notify);
 }
@@ -589,15 +595,17 @@ void BleTelemetryService::publishDashboardPackets(
     bool stationConnected,
     bool mdnsReady,
     const uint8_t stationIp[4],
+    const BatteryProfileSettings& batteryProfile,
+    const StateOfChargeEstimator& stateOfCharge,
     bool notify)
 {
     // Cycle one compact data page per scheduled BLE update. This keeps the
     // link responsive on the ESP32-C3 while a newly connected app has a
-    // complete dashboard within seven seconds.
+    // complete dashboard within eight seconds.
     uint8_t packet[BINARY_TELEMETRY_SIZE] = {};
     const Telemetry& telemetry = store.current();
     const Ina228ConfigurationStatus& config = sensor.configuration();
-    const uint8_t page = dashboardPacketIndex_++ % 7;
+    const uint8_t page = dashboardPacketIndex_++ % 8;
 
     switch (page) {
     case 0: {
@@ -701,7 +709,7 @@ void BleTelemetryService::publishDashboardPackets(
         writeInt24LE(packet + 7, roundAndClamp(alarms.maxAbsoluteCurrent, 1000.0f, 0, 8388607));
         writeInt32LE(packet + 10, roundAndClamp(alarms.maxTemperature, 10.0f, -1280, 1270));
         break;
-    default:
+    case 6:
         packet[0] = DASHBOARD_WIFI;
         packet[1] = (stationConfigured ? 1 : 0) |
                     (stationConnected ? 2 : 0) |
@@ -711,6 +719,19 @@ void BleTelemetryService::publishDashboardPackets(
         packet[4] = stationIp[2];
         packet[5] = stationIp[3];
         break;
+    default: {
+        packet[0] = DASHBOARD_SOC;
+        packet[1] = (stateOfCharge.known() ? 1 : 0) | (stateOfCharge.hasTimeToEmpty() ? 2 : 0);
+        writeUint16LE(packet + 2, static_cast<uint16_t>(roundAndClamp(
+            stateOfCharge.percent(batteryProfile), 10.0f, 0, 1000)));
+        writeUint32LE(packet + 4, stateOfCharge.hasTimeToEmpty()
+            ? stateOfCharge.timeToEmptySeconds() : 0xFFFFFFFFUL);
+        writeUint32LE(packet + 8, static_cast<uint32_t>(roundAndClamp(
+            batteryProfile.capacityAh, 1000.0f, 0, std::numeric_limits<int32_t>::max())));
+        writeUint16LE(packet + 12, static_cast<uint16_t>(roundAndClamp(
+            batteryProfile.chargedVoltage, 1000.0f, 0, 65535)));
+        break;
+    }
     }
 
     updateBinaryCharacteristic(dashboardCharacteristic_, packet, sizeof(packet), notify);
@@ -745,6 +766,12 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
         command = PendingCommand::SaveAlarms;
         break;
     case CONTROL_CLEAR_WIFI: command = PendingCommand::ClearWifi; break;
+    case CONTROL_SYNC_BATTERY_FULL: command = PendingCommand::SyncBatteryFull; break;
+    case CONTROL_SAVE_BATTERY_PROFILE:
+        // command(1) + capacity milli-Ah u32(4) + charged voltage mV u16(2) + requestId(2)
+        if (value.length() < 9) return;
+        command = PendingCommand::SaveBatteryProfile;
+        break;
     case CONTROL_SAVE_WIFI: {
         // command(1) + ssidLength(1) + ssid + passwordLength(1) + password + requestId(2)
         if (value.length() < 6) return;
@@ -783,6 +810,11 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
             owner_.pendingWifiSettings_.ssid[ssidLength] = '\0';
             memcpy(owner_.pendingWifiSettings_.password, data + 3 + ssidLength, passwordLength);
             owner_.pendingWifiSettings_.password[passwordLength] = '\0';
+        } else if (command == PendingCommand::SaveBatteryProfile) {
+            owner_.pendingBatteryProfile_.capacityAh =
+                static_cast<float>(readUint32LE(data + 1)) * 1.0e-3f;
+            owner_.pendingBatteryProfile_.chargedVoltage =
+                static_cast<float>(data[5] | (data[6] << 8)) * 1.0e-3f;
         }
         owner_.pendingCommand_.store(static_cast<uint8_t>(command));
     } else {
@@ -882,6 +914,20 @@ bool BleTelemetryService::consumeWifiSaveRequested(
 bool BleTelemetryService::consumeWifiClearRequested(uint16_t& requestId)
 {
     return consumeCommand(PendingCommand::ClearWifi, requestId);
+}
+
+bool BleTelemetryService::consumeBatteryProfileSaveRequested(
+    BatteryProfileSettings& settings,
+    uint16_t& requestId)
+{
+    if (!consumeCommand(PendingCommand::SaveBatteryProfile, requestId)) return false;
+    settings = pendingBatteryProfile_;
+    return true;
+}
+
+bool BleTelemetryService::consumeBatterySyncRequested(uint16_t& requestId)
+{
+    return consumeCommand(PendingCommand::SyncBatteryFull, requestId);
 }
 
 void BleTelemetryService::maintain()

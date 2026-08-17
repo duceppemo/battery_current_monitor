@@ -51,4 +51,12 @@ namespace Config
     constexpr char WIFI_AP_SSID[] = "BatteryMonitor";
     constexpr char WIFI_AP_PASSWORD[] = "Battery123";
     constexpr char WIFI_MDNS_HOSTNAME[] = "battery-monitor";
+
+    // State of charge is coulomb-counted against a user-configured capacity
+    // and re-synced to 100% once sustained near-full-charge conditions are
+    // seen, so it stays useful without requiring a lab-grade current sensor.
+    constexpr uint32_t SOC_FULL_CHARGE_SUSTAIN_MS = 180000; // 3 minutes.
+    constexpr float SOC_TAIL_CURRENT_CAPACITY_FRACTION = 1.0f / 50.0f; // C/50.
+    constexpr float SOC_CURRENT_SMOOTHING_ALPHA = 0.1f;
+    constexpr uint32_t SOC_PERSIST_INTERVAL_MS = 60000;
 }

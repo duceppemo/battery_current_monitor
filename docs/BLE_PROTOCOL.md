@@ -74,8 +74,8 @@ The companion app also subscribes to the Dashboard Data characteristic:
 ```
 
 It supports `Read` and `Notify`. Each notification is one 20-byte
-little-endian page. Firmware rotates through seven pages once per one-second
-BLE update, so the app has a complete dashboard within roughly seven seconds
+little-endian page. Firmware rotates through eight pages once per one-second
+BLE update, so the app has a complete dashboard within roughly eight seconds
 after connecting.
 The live Binary Telemetry v1 characteristic remains the authoritative fast
 live-data stream.
@@ -89,6 +89,7 @@ live-data stream.
 | `0x15` | shunt/config | `int32` shunt min/max in nanovolts at 1/5; INA CONFIG/ADC_CONFIG at 9/11; averages/conversion time at 13/15; temperature min/max in C at 17/18; bit 0 shunt extrema valid and bit 1 temperature extrema valid at 19. |
 | `0x16` | alarms | enabled flags at 1: bit 0 low voltage, bit 1 high voltage, bit 2 current, bit 3 temperature, bit 4 sensor health; active-alarm flags (same bits) at 2; `u16` low/high voltage in mV at 3/5; `int24` max absolute current in mA at 7; `int32` max temperature in deci-C at 10. |
 | `0x17` | Wi-Fi station | flags at 1: bit 0 station configured, bit 1 station connected, bit 2 mDNS ready; station IPv4 as four raw octets at 2-5 (all zero when not connected). The recovery AP (`BatteryMonitor` / `192.168.4.1`) is always available regardless of these flags. |
+| `0x18` | state of charge | flags at 1: bit 0 synced/known, bit 1 currently discharging (time-to-empty applicable). `u16` state of charge at 2, in 0.1% units (0-1000; meaningless until synced). `u32` time-to-empty in seconds at 4 (`0xFFFFFFFF` when not discharging or not synced). `u32` configured capacity in milli-Ah at 8. `u16` configured charged voltage in mV at 12. |
 
 Unknown page types must be ignored. All pages are fixed at 20 bytes; a client
 must not rely on an enlarged ATT MTU.
@@ -114,12 +115,15 @@ the app observes the resulting state on the next dashboard page.
 | `6` | flags, low/high voltage in mV, current in mA, temperature in deci-C | Save persistent monitor alarm thresholds. Flags: bit 0 low voltage, bit 1 high voltage, bit 2 absolute current, bit 3 temperature, bit 4 sensor health. |
 | `7` | `u8` SSID length (1-32), SSID bytes, `u8` password length (0-64, 0 only for an open network), password bytes | Save home Wi-Fi station credentials and start connecting, in parallel with the always-available recovery AP. Rejected if the SSID is empty or the password is 1-7 bytes (below the WPA2 minimum). |
 | `8` | none | Forget the stored Wi-Fi station credentials. The recovery AP remains available. |
+| `9` | `u32` capacity in milli-Ah, `u16` charged voltage in mV | Save the battery profile used for state-of-charge coulomb counting. Rejected if capacity is not in (0, 10000] Ah or charged voltage is not in (0, 100] V. |
+| `10` | none | Manually sync the fuel gauge to 100% now (e.g. once you know the battery is actually full). The monitor also does this automatically once voltage stays at or above the profile's charged voltage with a tapering (near-zero) current for 3 minutes. |
 
 Every app-originated command appends a `u16` request ID. A command is not
 considered successful until its matching Control Result notification reports
 that the monitor applied it; a BLE write response only confirms receipt.
 Commands `7` and `8` echo the resulting state on the next Wi-Fi station
-dashboard page (`0x17`) rather than in the Control Result itself.
+dashboard page (`0x17`) rather than in the Control Result itself; commands `9`
+and `10` do the same on the state-of-charge page (`0x18`).
 
 Command `7`'s payload can reach 99 bytes, well past the 20-byte notification
 size but still comfortably under a negotiated MTU. Request a larger MTU
@@ -149,10 +153,11 @@ The readable device-information characteristic is:
 ```
 
 Its UTF-8 value is a semicolon-separated diagnostic string, currently
-`FW=<firmware-version>;HW=<hardware-revision>;BLE=telemetry1,dashboard1,ota1,control1,wifi1`.
+`FW=<firmware-version>;HW=<hardware-revision>;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1`.
 Clients must ignore unknown keys so information can be added without a protocol
 break. The app must enable the BLE Wi-Fi settings UI only when this list
-includes `wifi1`.
+includes `wifi1`, and the state-of-charge/time-to-go UI only when it includes
+`soc1`.
 
 ## Firmware Transfer v1
 

@@ -10,6 +10,7 @@
 #include <BLEUtils.h>
 
 #include "energy/EnergyAccumulator.h"
+#include "energy/StateOfChargeEstimator.h"
 #include "alarm/AlarmSettings.h"
 #include "measurement/CalibrationSettings.h"
 #include "network/WifiSettings.h"
@@ -35,7 +36,9 @@ public:
                  bool calibrationStored, bool displayOn, bool accessPointReady,
                  const char* resetReason, uint8_t wifiClients,
                  bool stationConfigured, bool stationConnected, bool mdnsReady,
-                 const uint8_t stationIp[4]);
+                 const uint8_t stationIp[4],
+                 const BatteryProfileSettings& batteryProfile,
+                 const StateOfChargeEstimator& stateOfCharge);
     void maintain();
 
     bool consumeResetExtremaRequested(uint16_t& requestId);
@@ -46,6 +49,8 @@ public:
     bool consumeAlarmSaveRequested(DeviceAlarmSettings& settings, uint16_t& requestId);
     bool consumeWifiSaveRequested(WifiStationSettings& settings, uint16_t& requestId);
     bool consumeWifiClearRequested(uint16_t& requestId);
+    bool consumeBatteryProfileSaveRequested(BatteryProfileSettings& settings, uint16_t& requestId);
+    bool consumeBatterySyncRequested(uint16_t& requestId);
     void reportControlResult(uint8_t command, uint16_t requestId, ControlResult result);
 
     bool connected() const { return connected_.load(); }
@@ -93,6 +98,8 @@ private:
         SaveAlarms,
         SaveWifi,
         ClearWifi,
+        SaveBatteryProfile,
+        SyncBatteryFull,
         Writing = 255
     };
 
@@ -133,6 +140,8 @@ private:
         bool stationConnected,
         bool mdnsReady,
         const uint8_t stationIp[4],
+        const BatteryProfileSettings& batteryProfile,
+        const StateOfChargeEstimator& stateOfCharge,
         bool notify
     );
     void publishFirmwareUpdateStatus(bool notify);
@@ -179,6 +188,7 @@ private:
     // transition already provides the needed happens-before edge between the
     // BLE callback and the consuming main-loop read.
     WifiStationSettings pendingWifiSettings_;
+    BatteryProfileSettings pendingBatteryProfile_;
     std::atomic_uint8_t controlStatusCommand_{0};
     std::atomic_uint16_t controlStatusRequestId_{0};
     std::atomic_uint8_t controlStatusResult_{0};

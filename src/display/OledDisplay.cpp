@@ -192,13 +192,20 @@ void OledDisplay::showLivePage(
     const EnergyTotals& energy,
     bool bleConnected,
     uint8_t wifiClients,
-    uint32_t failedSamples)
+    uint32_t failedSamples,
+    bool socKnown,
+    float socPercent)
 {
     char left[32];
     char right[32];
 
     oled_.setFont(u8g2_font_5x8_tf);
-    oled_.drawStr(2, 8, "LIVE 1/2");
+    if (socKnown) {
+        snprintf(left, sizeof(left), "%.0f%% 1/2", static_cast<double>(socPercent));
+    } else {
+        snprintf(left, sizeof(left), "--%% 1/2");
+    }
+    oled_.drawStr(2, 8, left);
     snprintf(
         left,
         sizeof(left),
@@ -274,7 +281,9 @@ void OledDisplay::showMeasurements(
     const EnergyTotals& energy,
     bool bleConnected,
     uint8_t wifiClients,
-    uint32_t failedSamples)
+    uint32_t failedSamples,
+    bool socKnown,
+    float socPercent)
 {
     if (!on_) {
         return;
@@ -286,7 +295,7 @@ void OledDisplay::showMeasurements(
     oled_.setFont(u8g2_font_6x12_tf);
 
     if (page_ == Page::Live) {
-        showLivePage(telemetry, energy, bleConnected, wifiClients, failedSamples);
+        showLivePage(telemetry, energy, bleConnected, wifiClients, failedSamples, socKnown, socPercent);
     } else {
         showExtremaPage(store);
     }

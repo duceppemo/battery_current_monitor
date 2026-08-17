@@ -56,7 +56,9 @@ void WebDashboard::begin(
     const CalibrationSettings& calibration,
     const AlarmSettings& alarms,
     const AlarmMonitor& alarmMonitor,
-    FirmwareUpdateService& firmwareUpdate)
+    FirmwareUpdateService& firmwareUpdate,
+    const BatteryProfile& batteryProfile,
+    const StateOfChargeEstimator& stateOfCharge)
 {
     store_ = &store;
     energyTotals_ = &energyTotals;
@@ -65,6 +67,8 @@ void WebDashboard::begin(
     alarms_ = &alarms;
     alarmMonitor_ = &alarmMonitor;
     firmwareUpdate_ = &firmwareUpdate;
+    batteryProfile_ = &batteryProfile;
+    stateOfCharge_ = &stateOfCharge;
     telemetryJson_.reserve(1400);
 
     WiFi.persistent(false);
@@ -82,6 +86,8 @@ void WebDashboard::begin(
     server_.on("/api/alarms/save", HTTP_POST, [this]() { handleAlarmSave(); });
     server_.on("/api/wifi/save", HTTP_POST, [this]() { handleWifiSave(); });
     server_.on("/api/wifi/clear", HTTP_POST, [this]() { handleWifiClear(); });
+    server_.on("/api/battery/save", HTTP_POST, [this]() { handleBatterySave(); });
+    server_.on("/api/battery/sync", HTTP_POST, [this]() { handleBatterySync(); });
     server_.on("/api/firmware", HTTP_POST,
         [this]() {
             if (firmwareUpdateSucceeded_) {
@@ -184,6 +190,18 @@ bool WebDashboard::consumeAlarmSaveRequested(DeviceAlarmSettings& settings)
     if (!consumeCommand(PendingCommand::SaveAlarms)) return false;
     settings = pendingAlarms_;
     return true;
+}
+
+bool WebDashboard::consumeBatteryProfileSaveRequested(BatteryProfileSettings& settings)
+{
+    if (!consumeCommand(PendingCommand::SaveBatteryProfile)) return false;
+    settings = pendingBatteryProfile_;
+    return true;
+}
+
+bool WebDashboard::consumeBatterySyncRequested()
+{
+    return consumeCommand(PendingCommand::SyncBatteryFull);
 }
 
 void WebDashboard::setCalibrationStatus(const char* status)
@@ -381,7 +399,8 @@ void WebDashboard::appendMetric(
 void WebDashboard::handleTelemetry()
 {
     if (store_ == nullptr || energyTotals_ == nullptr || sensor_ == nullptr ||
-        calibration_ == nullptr || alarms_ == nullptr || alarmMonitor_ == nullptr) {
+        calibration_ == nullptr || alarms_ == nullptr || alarmMonitor_ == nullptr ||
+        batteryProfile_ == nullptr || stateOfCharge_ == nullptr) {
         server_.send(503, "application/json", "{\"error\":\"telemetry unavailable\"}");
         return;
     }
@@ -417,6 +436,23 @@ void WebDashboard::handleTelemetry()
     appendNullableFloat(json, true, energyTotals_->chargedAh, 6);
     json += ",\"chargedWh\":";
     appendNullableFloat(json, true, energyTotals_->chargedWh, 6);
+    json += "}";
+
+    const BatteryProfileSettings& batteryProfile = batteryProfile_->current();
+    json += ",\"battery\":{\"capacityAh\":";
+    appendNullableFloat(json, true, batteryProfile.capacityAh, 3);
+    json += ",\"chargedVoltage\":";
+    appendNullableFloat(json, true, batteryProfile.chargedVoltage, 3);
+    json += ",\"known\":";
+    json += stateOfCharge_->known() ? "true" : "false";
+    json += ",\"percent\":";
+    appendNullableFloat(json, stateOfCharge_->known(), stateOfCharge_->percent(batteryProfile), 1);
+    json += ",\"remainingAh\":";
+    appendNullableFloat(json, stateOfCharge_->known(), stateOfCharge_->remainingAh(), 3);
+    json += ",\"hasTimeToEmpty\":";
+    json += stateOfCharge_->hasTimeToEmpty() ? "true" : "false";
+    json += ",\"timeToEmptySeconds\":";
+    appendUnsigned(json, stateOfCharge_->hasTimeToEmpty() ? stateOfCharge_->timeToEmptySeconds() : 0);
     json += "}";
 
     const Ina228ConfigurationStatus& configuration = sensor_->configuration();
@@ -589,6 +625,29 @@ void WebDashboard::handleAlarmSave()
         server_.send(400, "application/json", "{\"error\":\"alarms rejected\"}"); return;
     }
     pendingAlarms_ = requested;
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleBatterySave()
+{
+    BatteryProfileSettings requested;
+    if (!parseFiniteFloat(server_, "capacity", requested.capacityAh) ||
+        !parseFiniteFloat(server_, "chargedVoltage", requested.chargedVoltage)) {
+        server_.send(400, "application/json", "{\"error\":\"invalid battery profile\"}"); return;
+    }
+    if (!BatteryProfile::isValid(requested) || !queueCommand(PendingCommand::SaveBatteryProfile)) {
+        server_.send(400, "application/json", "{\"error\":\"battery profile rejected\"}"); return;
+    }
+    pendingBatteryProfile_ = requested;
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleBatterySync()
+{
+    if (!queueCommand(PendingCommand::SyncBatteryFull)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
     server_.send(202, "application/json", "{\"ok\":true}");
 }
 
