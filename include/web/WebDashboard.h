@@ -6,6 +6,7 @@
 #include "alarm/AlarmSettings.h"
 #include "energy/EnergyAccumulator.h"
 #include "measurement/CalibrationSettings.h"
+#include "network/WifiSettings.h"
 #include "ota/FirmwareUpdateService.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
@@ -61,10 +62,14 @@ private:
     void handleCalibrationSave();
     void handleCalibrationReset();
     void handleAlarmSave();
+    void handleWifiSave();
+    void handleWifiClear();
     void handleFirmwareUpload();
     void handleNotFound();
     bool startAccessPoint();
+    void startStation(uint32_t nowMs);
     void maintainAccessPoint(uint32_t nowMs);
+    void maintainStation(uint32_t nowMs);
     bool queueCommand(PendingCommand command);
     bool consumeCommand(PendingCommand command);
 
@@ -75,6 +80,7 @@ private:
         uint8_t decimals
     );
     static void appendUnsigned(String& json, uint32_t value);
+    static void appendJsonString(String& json, const char* value);
 
     static void appendMetric(
         String& json,
@@ -102,6 +108,11 @@ private:
     const char* resetReason_ = "unknown";
     bool accessPointReady_ = false;
     uint32_t lastAccessPointCheckMs_ = 0;
+    WifiSettings wifiSettings_;
+    bool stationConnected_ = false;
+    bool mdnsReady_ = false;
+    uint32_t stationAttemptStartedMs_ = 0;
+    uint32_t lastStationAttemptMs_ = 0;
     PendingCommand pendingCommand_ = PendingCommand::None;
     CurrentCalibration pendingCalibration_;
     DeviceAlarmSettings pendingAlarms_;

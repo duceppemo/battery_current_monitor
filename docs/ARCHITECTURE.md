@@ -75,7 +75,7 @@ Owns the latest snapshot and extrema. It updates each statistic only with a fini
 
 ### Presentation and transport components
 
-`OledDisplay`, `BleTelemetryService` and `WebDashboard` consume stored state only. `WebDashboard` also owns SoftAP/HTTP and JSON serialization; `BleTelemetryService` owns GATT, advertising state and the documented binary mobile-app telemetry contract. BLE control writes are queued for the application loop and return a request-ID-matched result on `control1`. Neither transport performs I2C work or retains a competing measurement cache.
+`OledDisplay`, `BleTelemetryService` and `WebDashboard` consume stored state only. `WebDashboard` owns the always-on recovery SoftAP, optional home-network station association, mDNS, HTTP and JSON serialization. `WifiSettings` keeps station credentials in its own NVS namespace and never exposes the password in telemetry. `BleTelemetryService` owns GATT, advertising state and the documented binary mobile-app telemetry contract. BLE control writes are queued for the application loop and return a request-ID-matched result on `control1`. Neither transport performs I2C work or retains a competing measurement cache.
 
 ### `FirmwareUpdateService`
 

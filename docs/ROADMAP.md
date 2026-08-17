@@ -68,7 +68,7 @@ JSON and BLE.
 3. [x] Add an app-local bounded session history buffer with an explicit 7,200-entry retention policy and trend views.
 4. [x] Add user-approved CSV export from the app-local session log. Consider bounded LittleFS persistence and wear limits only as a separate device-side feature.
 5. Make session-counter persistence opt-in and crash-safe.
-6. Add configurable Wi-Fi station/AP modes, credentials and mDNS.
+6. [x] Add configurable Wi-Fi station/AP modes, credentials and mDNS. Keep the `BatteryMonitor` AP as a concurrent recovery path, store credentials in a dedicated NVS namespace and retry station association without blocking measurements.
 
 **Done when:** memory limits are documented, exports carry timestamps and units, and no network operation blocks measurement polling.
 

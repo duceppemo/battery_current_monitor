@@ -4,6 +4,7 @@
 #include <cstdlib>
 
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <Update.h>
 #include <esp_system.h>
 
@@ -13,6 +14,8 @@
 namespace
 {
     constexpr uint32_t ACCESS_POINT_HEALTH_CHECK_MS = 5000;
+    constexpr uint32_t STATION_CONNECT_TIMEOUT_MS = 15000;
+    constexpr uint32_t STATION_RETRY_INTERVAL_MS = 30000;
 
     bool parseFiniteFloat(WebServer& server, const char* name, float& value)
     {
@@ -29,6 +32,19 @@ namespace
 
         value = parsed;
         return true;
+    }
+
+    bool parseWifiSettings(WebServer& server, WifiStationSettings& settings)
+    {
+        if (!server.hasArg("ssid") || !server.hasArg("password")) return false;
+        const String ssid = server.arg("ssid");
+        const String password = server.arg("password");
+        if (ssid.length() >= sizeof(settings.ssid) || password.length() >= sizeof(settings.password)) {
+            return false;
+        }
+        snprintf(settings.ssid, sizeof(settings.ssid), "%s", ssid.c_str());
+        snprintf(settings.password, sizeof(settings.password), "%s", password.c_str());
+        return WifiSettings::isValid(settings);
     }
 }
 
@@ -50,7 +66,10 @@ void WebDashboard::begin(
     firmwareUpdate_ = &firmwareUpdate;
     telemetryJson_.reserve(1400);
 
+    WiFi.persistent(false);
+    wifiSettings_.begin();
     startAccessPoint();
+    if (wifiSettings_.configured()) startStation(millis());
 
     server_.on("/", HTTP_GET, [this]() { handleRoot(); });
     server_.on("/api/telemetry", HTTP_GET, [this]() { handleTelemetry(); });
@@ -60,6 +79,8 @@ void WebDashboard::begin(
     server_.on("/api/calibration/save", HTTP_POST, [this]() { handleCalibrationSave(); });
     server_.on("/api/calibration/reset", HTTP_POST, [this]() { handleCalibrationReset(); });
     server_.on("/api/alarms/save", HTTP_POST, [this]() { handleAlarmSave(); });
+    server_.on("/api/wifi/save", HTTP_POST, [this]() { handleWifiSave(); });
+    server_.on("/api/wifi/clear", HTTP_POST, [this]() { handleWifiClear(); });
     server_.on("/api/firmware", HTTP_POST,
         [this]() {
             if (firmwareUpdateSucceeded_) {
@@ -80,7 +101,7 @@ void WebDashboard::begin(
 
 bool WebDashboard::startAccessPoint()
 {
-    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA);
     if (!WiFi.softAP(Config::WIFI_AP_SSID, Config::WIFI_AP_PASSWORD)) {
         Serial.println("ERROR: Wi-Fi SoftAP failed.");
         accessPointReady_ = false;
@@ -99,10 +120,28 @@ void WebDashboard::update()
     if (running_) {
         server_.handleClient();
         maintainAccessPoint(millis());
+        maintainStation(millis());
         if (restartAfterMs_ != 0 && static_cast<int32_t>(millis() - restartAfterMs_) >= 0) {
             ESP.restart();
         }
     }
+}
+
+void WebDashboard::startStation(uint32_t nowMs)
+{
+    if (!wifiSettings_.configured()) return;
+
+    const WifiStationSettings& settings = wifiSettings_.current();
+    if (mdnsReady_) {
+        MDNS.end();
+        mdnsReady_ = false;
+    }
+    stationConnected_ = false;
+    stationAttemptStartedMs_ = nowMs;
+    lastStationAttemptMs_ = nowMs;
+    WiFi.disconnect(false, false);
+    WiFi.begin(settings.ssid, settings.password);
+    Serial.printf("Wi-Fi station connecting to: %s\n", settings.ssid);
 }
 
 bool WebDashboard::consumeDisplayToggleRequested()
@@ -174,7 +213,8 @@ void WebDashboard::maintainAccessPoint(uint32_t nowMs)
     }
     lastAccessPointCheckMs_ = nowMs;
 
-    const bool modeIsAccessPoint = WiFi.getMode() == WIFI_AP;
+    const wifi_mode_t mode = WiFi.getMode();
+    const bool modeIsAccessPoint = mode == WIFI_AP || mode == WIFI_AP_STA;
     const bool hasAccessPointIp = WiFi.softAPIP() != IPAddress(0, 0, 0, 0);
     accessPointReady_ = modeIsAccessPoint && hasAccessPointIp;
 
@@ -182,6 +222,51 @@ void WebDashboard::maintainAccessPoint(uint32_t nowMs)
         Serial.println("WARNING: Wi-Fi AP unavailable; restarting it.");
         WiFi.softAPdisconnect(true);
         startAccessPoint();
+    }
+}
+
+void WebDashboard::maintainStation(uint32_t nowMs)
+{
+    if (!wifiSettings_.configured()) {
+        stationConnected_ = false;
+        if (mdnsReady_) {
+            MDNS.end();
+            mdnsReady_ = false;
+        }
+        return;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        if (!stationConnected_) {
+            stationConnected_ = true;
+            Serial.printf("Wi-Fi station IP: %s\n", WiFi.localIP().toString().c_str());
+        }
+        if (!mdnsReady_) {
+            mdnsReady_ = MDNS.begin(Config::WIFI_MDNS_HOSTNAME);
+            if (mdnsReady_) {
+                MDNS.addService("http", "tcp", 80);
+                Serial.printf("mDNS: http://%s.local/\n", Config::WIFI_MDNS_HOSTNAME);
+            } else {
+                Serial.println("WARNING: mDNS start failed.");
+            }
+        }
+        return;
+    }
+
+    if (stationConnected_) {
+        stationConnected_ = false;
+        if (mdnsReady_) {
+            MDNS.end();
+            mdnsReady_ = false;
+        }
+        Serial.println("WARNING: Wi-Fi station disconnected; AP fallback remains available.");
+    }
+
+    const bool attemptTimedOut = stationAttemptStartedMs_ != 0 &&
+        (nowMs - stationAttemptStartedMs_) >= STATION_CONNECT_TIMEOUT_MS;
+    if ((attemptTimedOut && (nowMs - lastStationAttemptMs_) >= STATION_RETRY_INTERVAL_MS) ||
+        (stationAttemptStartedMs_ == 0 && (nowMs - lastStationAttemptMs_) >= STATION_RETRY_INTERVAL_MS)) {
+        startStation(nowMs);
     }
 }
 
@@ -241,6 +326,26 @@ void WebDashboard::appendUnsigned(String& json, uint32_t value)
     char formatted[16];
     snprintf(formatted, sizeof(formatted), "%lu", static_cast<unsigned long>(value));
     json += formatted;
+}
+
+void WebDashboard::appendJsonString(String& json, const char* value)
+{
+    json += '"';
+    if (value != nullptr) {
+        for (const char* character = value; *character != '\0'; ++character) {
+            switch (*character) {
+            case '"': json += "\\\""; break;
+            case '\\': json += "\\\\"; break;
+            case '\n': json += "\\n"; break;
+            case '\r': json += "\\r"; break;
+            case '\t': json += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(*character) >= 0x20) json += *character;
+                break;
+            }
+        }
+    }
+    json += '"';
 }
 
 void WebDashboard::appendMetric(
@@ -352,6 +457,22 @@ void WebDashboard::handleTelemetry()
     json += bleAdvertising_ ? "true" : "false";
     json += ",\"accessPointReady\":";
     json += accessPointReady_ ? "true" : "false";
+    const WifiStationSettings& wifi = wifiSettings_.current();
+    json += ",\"wifi\":{\"accessPointSsid\":";
+    appendJsonString(json, Config::WIFI_AP_SSID);
+    json += ",\"accessPointIp\":";
+    appendJsonString(json, WiFi.softAPIP().toString().c_str());
+    json += ",\"stationConfigured\":";
+    json += wifiSettings_.configured() ? "true" : "false";
+    json += ",\"stationConnected\":";
+    json += stationConnected_ ? "true" : "false";
+    json += ",\"stationSsid\":";
+    appendJsonString(json, wifi.ssid);
+    json += ",\"stationIp\":";
+    appendJsonString(json, stationConnected_ ? WiFi.localIP().toString().c_str() : "");
+    json += ",\"mdnsHostname\":";
+    appendJsonString(json, mdnsReady_ ? Config::WIFI_MDNS_HOSTNAME : "");
+    json += "}";
     json += ",\"resetReason\":\"";
     json += resetReason_;
     json += "\"";
@@ -459,6 +580,40 @@ void WebDashboard::handleAlarmSave()
     }
     pendingAlarms_ = requested;
     server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleWifiSave()
+{
+    WifiStationSettings requested;
+    if (!parseWifiSettings(server_, requested)) {
+        server_.send(400, "application/json", "{\"error\":\"invalid Wi-Fi settings\"}");
+        return;
+    }
+    if (!wifiSettings_.save(requested)) {
+        server_.send(500, "application/json", "{\"error\":\"Wi-Fi settings were not saved\"}");
+        return;
+    }
+
+    startStation(millis());
+    server_.send(202, "application/json", "{\"ok\":true,\"message\":\"station connecting; AP remains available\"}");
+}
+
+void WebDashboard::handleWifiClear()
+{
+    if (!wifiSettings_.clear()) {
+        server_.send(500, "application/json", "{\"error\":\"Wi-Fi settings were not cleared\"}");
+        return;
+    }
+
+    if (mdnsReady_) {
+        MDNS.end();
+        mdnsReady_ = false;
+    }
+    WiFi.disconnect(false, false);
+    stationConnected_ = false;
+    stationAttemptStartedMs_ = 0;
+    Serial.println("Wi-Fi station credentials cleared; AP fallback remains available.");
+    server_.send(200, "application/json", "{\"ok\":true}");
 }
 
 void WebDashboard::handleFirmwareUpload()

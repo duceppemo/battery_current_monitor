@@ -3,6 +3,19 @@
 Modular firmware for a wireless battery current monitor using a Seeed Studio
 XIAO ESP32-C3, INA228 and SSD1309 128x64 OLED.
 
+## Companion app and shared contract
+
+This firmware pairs with the public [Battery Monitor Flutter
+app](https://github.com/duceppemo/battery-monitor-app). The projects are
+separate repositories but one product: protocol or OTA changes must be made
+and released compatibly in both. The canonical packet and control contract is
+[docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md); the matching app copy exists so
+mobile development remains self-contained. Binary Telemetry v1 is a fixed
+20-byte, one-Hz notification and must remain compatible without MTU
+negotiation. The app discovers public GitHub Releases without embedded
+credentials, downloads the OTA `.bin` before connecting, and transfers it over
+BLE only after reading the monitor firmware version.
+
 ## Current architecture
 
 ```text
@@ -40,7 +53,7 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 - SSD1309 OLED
 - BLE characteristics with human-readable descriptors and acknowledged controls
 - Combined BLE telemetry
-- Wi-Fi SoftAP and live dashboard
+- Concurrent Wi-Fi recovery SoftAP, optional home-network station mode and live dashboard
 - `/api/telemetry` JSON endpoint
 - Separate Web and BLE reset controls for extrema and energy
 - Device Information reporting firmware version, hardware revision and BLE capabilities
@@ -99,6 +112,14 @@ Password: Battery123
 Open the IP printed in the serial monitor; the default ESP32 SoftAP address is
 normally `192.168.4.1`.
 
+The dashboard can also save a home-network SSID and password. The monitor then
+joins that network in parallel with its always-on recovery AP. Once joined,
+open `http://battery-monitor.local/` from the same network (or use the station
+IP shown in the dashboard/serial log). The Wi-Fi password is stored only in the
+ESP32's NVS and is never returned by the API or shown in the dashboard. If the
+home network is unavailable, measurements, BLE and the `BatteryMonitor` AP
+continue normally; the station connection retries in the background.
+
 The dashboard shows live, minimum and maximum values for:
 
 - voltage
@@ -110,9 +131,9 @@ The dashboard shows live, minimum and maximum values for:
 The dashboard also shows BLE, I2C, Wi-Fi-client and display status.
 
 It provides grouped controls beside the affected data: separate extrema and
-session-energy resets, OLED power, guided calibration, persistent alarm limits
-and Web OTA. The update card shows both the installed firmware version and the
-version detected in a selected OTA image before upload.
+session-energy resets, OLED power, guided calibration, persistent alarm limits,
+home Wi-Fi setup and Web OTA. The update card shows both the installed firmware
+version and the version detected in a selected OTA image before upload.
 
 ## BLE
 
