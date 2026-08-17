@@ -14,9 +14,16 @@ BLE protocol, control or OTA change, update and cross-check both repositories.
   (`0x3C`) through U8g2. Do not add I2C reads in presentation transports.
 - Keep the `min_spiffs.csv` 4 MB dual-OTA layout and preserve OTA headroom.
   Build with `pio run`; the release toolchain is pinned to `espressif32@7.0.1`.
-- Do not manually add `BLE2902`; notification characteristics rely on the
-  ESP32 BLE stack's automatic CCCD handling. Keep JSON float formatting types
-  explicit for Arduino-ESP32 compatibility.
+- Every NOTIFY characteristic needs an explicit `BLE2902` CCCD descriptor
+  added via `addDescriptor()`; this library never adds one automatically, and
+  without it a central cannot enable notifications on that characteristic.
+  When adding characteristics, also account for GATT attribute handles:
+  `createService(uuid)` defaults to only 15 handles, and a NOTIFY
+  characteristic with a CCCD and a User Description descriptor costs 4 each
+  (write-only ones cost 3) — pass an explicit, generous `numHandles` via
+  `createService(BLEUUID(uuid), numHandles, 0)` once the service holds more
+  than a couple of characteristics. Keep JSON float formatting types explicit
+  for Arduino-ESP32 compatibility.
 - Apply BLE dashboard commands on the application loop. App-originated
   commands include a request ID and must return an explicit Control Result;
   write success alone is not command success.

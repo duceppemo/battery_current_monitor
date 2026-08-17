@@ -204,6 +204,12 @@ BLECharacteristic* BleTelemetryService::createCharacteristic(
         BLECharacteristic::PROPERTY_NOTIFY
     );
 
+    // This library never auto-creates a CCCD for NOTIFY characteristics
+    // (only descriptors added here via addDescriptor() get registered), so
+    // without this a central can't find anything to write to enable
+    // notifications.
+    characteristic->addDescriptor(new BLE2902());
+
     BLEDescriptor* userDescription = new BLEDescriptor("2901");
     userDescription->setValue(
         const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(description)),
@@ -253,7 +259,15 @@ void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
     server_ = BLEDevice::createServer();
     server_->setCallbacks(&callbacks_);
 
-    BLEService* service = server_->createService(SERVICE_UUID);
+    // The default single-argument overload allocates only 15 GATT attribute
+    // handles. This service defines 15 characteristics (most READ|NOTIFY
+    // with an auto-added CCCD plus a User Description descriptor, so 4
+    // handles each; two write-only ones need 3), needing ~59 handles total
+    // plus one for the service declaration. Anything created once the
+    // default table fills up (starting around "temperature") never actually
+    // registers in the live GATT database, even though the local
+    // BLECharacteristic object still exists and looks fine to firmware.
+    BLEService* service = server_->createService(BLEUUID(SERVICE_UUID), 80, 0);
 
     voltageCharacteristic_ = createCharacteristic(service, VOLTAGE_UUID, "Battery Voltage (V)");
     currentCharacteristic_ = createCharacteristic(service, CURRENT_UUID, "Current (A)");

@@ -3,6 +3,7 @@
 #include <atomic>
 
 #include <Arduino.h>
+#include <BLE2902.h>
 #include <BLEDescriptor.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
