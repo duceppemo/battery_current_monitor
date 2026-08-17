@@ -30,6 +30,8 @@ public:
     bool consumeCalibrationResetRequested();
     bool consumeAlarmSaveRequested(DeviceAlarmSettings& settings);
     void setCalibrationStatus(const char* status);
+    bool saveWifiSettings(const WifiStationSettings& settings);
+    bool clearWifiSettings();
 
     void setRuntimeStatus(
         bool bleConnected,
@@ -43,6 +45,10 @@ public:
     uint8_t clientCount() const;
     bool running() const { return running_; }
     bool accessPointReady() const { return accessPointReady_; }
+    bool stationConfigured() const { return wifiSettings_.configured(); }
+    bool stationConnected() const { return stationConnected_; }
+    bool mdnsReady() const { return mdnsReady_; }
+    void stationIpOctets(uint8_t octets[4]) const;
 
 private:
     enum class PendingCommand : uint8_t {

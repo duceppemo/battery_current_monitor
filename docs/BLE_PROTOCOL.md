@@ -74,9 +74,9 @@ The companion app also subscribes to the Dashboard Data characteristic:
 ```
 
 It supports `Read` and `Notify`. Each notification is one 20-byte
-little-endian page. Firmware rotates through six pages once per one-second BLE
-update, so the app has a complete dashboard within roughly six seconds after
-connecting.
+little-endian page. Firmware rotates through seven pages once per one-second
+BLE update, so the app has a complete dashboard within roughly seven seconds
+after connecting.
 The live Binary Telemetry v1 characteristic remains the authoritative fast
 live-data stream.
 
@@ -87,6 +87,8 @@ live-data stream.
 | `0x13` | monitor state | flags at 1: sensor OK, display on, INA configured, readback valid, wide shunt range, Wi-Fi AP ready, stored calibration. `u16` sequence at 2; `u32` uptime seconds, successful samples and failed samples at 4/8/12; Wi-Fi client count at 16; reset-reason code at 17; conversion time in us at 18. |
 | `0x14` | calibration | stored flag at 1; `u32` shunt resistance in micro-ohms at 2; `int32` offset in nanovolts at 6; `int32` gain in ppm at 10; current shunt voltage in nanovolts at 14; shunt-valid flag at 18. |
 | `0x15` | shunt/config | `int32` shunt min/max in nanovolts at 1/5; INA CONFIG/ADC_CONFIG at 9/11; averages/conversion time at 13/15; temperature min/max in C at 17/18; bit 0 shunt extrema valid and bit 1 temperature extrema valid at 19. |
+| `0x16` | alarms | enabled flags at 1: bit 0 low voltage, bit 1 high voltage, bit 2 current, bit 3 temperature, bit 4 sensor health; active-alarm flags (same bits) at 2; `u16` low/high voltage in mV at 3/5; `int24` max absolute current in mA at 7; `int32` max temperature in deci-C at 10. |
+| `0x17` | Wi-Fi station | flags at 1: bit 0 station configured, bit 1 station connected, bit 2 mDNS ready; station IPv4 as four raw octets at 2-5 (all zero when not connected). The recovery AP (`BatteryMonitor` / `192.168.4.1`) is always available regardless of these flags. |
 
 Unknown page types must be ignored. All pages are fixed at 20 bytes; a client
 must not rely on an enlarged ATT MTU.
@@ -110,10 +112,19 @@ the app observes the resulting state on the next dashboard page.
 | `4` | 12 bytes after command: `u32` resistance micro-ohms, `int32` offset nanovolts, `int32` gain ppm | Validate and store calibration, then reset session values. |
 | `5` | none | Restore compile-time default calibration, then reset session values. |
 | `6` | flags, low/high voltage in mV, current in mA, temperature in deci-C | Save persistent monitor alarm thresholds. Flags: bit 0 low voltage, bit 1 high voltage, bit 2 absolute current, bit 3 temperature, bit 4 sensor health. |
+| `7` | `u8` SSID length (1-32), SSID bytes, `u8` password length (0-64, 0 only for an open network), password bytes | Save home Wi-Fi station credentials and start connecting, in parallel with the always-available recovery AP. Rejected if the SSID is empty or the password is 1-7 bytes (below the WPA2 minimum). |
+| `8` | none | Forget the stored Wi-Fi station credentials. The recovery AP remains available. |
 
 Every app-originated command appends a `u16` request ID. A command is not
 considered successful until its matching Control Result notification reports
 that the monitor applied it; a BLE write response only confirms receipt.
+Commands `7` and `8` echo the resulting state on the next Wi-Fi station
+dashboard page (`0x17`) rather than in the Control Result itself.
+
+Command `7`'s payload can reach 99 bytes, well past the 20-byte notification
+size but still comfortably under a negotiated MTU. Request a larger MTU
+before writing it; a default 23-byte MTU only guarantees 20 usable bytes and
+will fail for anything beyond a very short SSID and password.
 
 ### Control Result v1
 
@@ -138,9 +149,10 @@ The readable device-information characteristic is:
 ```
 
 Its UTF-8 value is a semicolon-separated diagnostic string, currently
-`FW=<firmware-version>;HW=<hardware-revision>;BLE=telemetry1,dashboard1,ota1,control1`.
+`FW=<firmware-version>;HW=<hardware-revision>;BLE=telemetry1,dashboard1,ota1,control1,wifi1`.
 Clients must ignore unknown keys so information can be added without a protocol
-break.
+break. The app must enable the BLE Wi-Fi settings UI only when this list
+includes `wifi1`.
 
 ## Firmware Transfer v1
 

@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 
 #include <WiFi.h>
 #include <ESPmDNS.h>
@@ -598,20 +599,38 @@ void WebDashboard::handleWifiSave()
         server_.send(400, "application/json", "{\"error\":\"invalid Wi-Fi settings\"}");
         return;
     }
-    if (!wifiSettings_.save(requested)) {
+    if (!saveWifiSettings(requested)) {
         server_.send(500, "application/json", "{\"error\":\"Wi-Fi settings were not saved\"}");
         return;
     }
 
-    startStation(millis());
     server_.send(202, "application/json", "{\"ok\":true,\"message\":\"station connecting; AP remains available\"}");
 }
 
 void WebDashboard::handleWifiClear()
 {
-    if (!wifiSettings_.clear()) {
+    if (!clearWifiSettings()) {
         server_.send(500, "application/json", "{\"error\":\"Wi-Fi settings were not cleared\"}");
         return;
+    }
+
+    server_.send(200, "application/json", "{\"ok\":true}");
+}
+
+bool WebDashboard::saveWifiSettings(const WifiStationSettings& settings)
+{
+    if (!wifiSettings_.save(settings)) {
+        return false;
+    }
+
+    startStation(millis());
+    return true;
+}
+
+bool WebDashboard::clearWifiSettings()
+{
+    if (!wifiSettings_.clear()) {
+        return false;
     }
 
     if (mdnsReady_) {
@@ -622,7 +641,21 @@ void WebDashboard::handleWifiClear()
     stationConnected_ = false;
     stationAttemptStartedMs_ = 0;
     Serial.println("Wi-Fi station credentials cleared; AP fallback remains available.");
-    server_.send(200, "application/json", "{\"ok\":true}");
+    return true;
+}
+
+void WebDashboard::stationIpOctets(uint8_t octets[4]) const
+{
+    if (!stationConnected_) {
+        memset(octets, 0, 4);
+        return;
+    }
+
+    const IPAddress ip = WiFi.localIP();
+    octets[0] = ip[0];
+    octets[1] = ip[1];
+    octets[2] = ip[2];
+    octets[3] = ip[3];
 }
 
 void WebDashboard::handleFirmwareUpload()

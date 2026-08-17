@@ -57,12 +57,15 @@ namespace
     constexpr uint8_t DASHBOARD_CALIBRATION = 0x14;
     constexpr uint8_t DASHBOARD_SHUNT = 0x15;
     constexpr uint8_t DASHBOARD_ALARMS = 0x16;
+    constexpr uint8_t DASHBOARD_WIFI = 0x17;
     constexpr uint8_t CONTROL_RESET_EXTREMA = 1;
     constexpr uint8_t CONTROL_RESET_SESSION = 2;
     constexpr uint8_t CONTROL_TOGGLE_DISPLAY = 3;
     constexpr uint8_t CONTROL_SAVE_CALIBRATION = 4;
     constexpr uint8_t CONTROL_RESET_CALIBRATION = 5;
     constexpr uint8_t CONTROL_SAVE_ALARMS = 6;
+    constexpr uint8_t CONTROL_SAVE_WIFI = 7;
+    constexpr uint8_t CONTROL_CLEAR_WIFI = 8;
     constexpr size_t FIRMWARE_UPDATE_STATUS_SIZE = 12;
     constexpr size_t CONTROL_STATUS_SIZE = 6;
 
@@ -344,7 +347,7 @@ void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
     snprintf(
         deviceInfo,
         sizeof(deviceInfo),
-        "FW=%s;HW=%s;BLE=telemetry1,dashboard1,ota1,control1",
+        "FW=%s;HW=%s;BLE=telemetry1,dashboard1,ota1,control1,wifi1",
         Config::FIRMWARE_VERSION,
         Config::HARDWARE_REVISION
     );
@@ -443,7 +446,11 @@ void BleTelemetryService::publish(
     bool displayOn,
     bool accessPointReady,
     const char* resetReason,
-    uint8_t wifiClients)
+    uint8_t wifiClients,
+    bool stationConfigured,
+    bool stationConnected,
+    bool mdnsReady,
+    const uint8_t stationIp[4])
 {
     const Telemetry& telemetry = store.current();
     const bool notify = connected();
@@ -523,7 +530,8 @@ void BleTelemetryService::publish(
     updateBinaryCharacteristic(binaryTelemetryCharacteristic_, binaryTelemetry,
                                sizeof(binaryTelemetry), notify);
     publishDashboardPackets(store, energy, sensor, calibration, alarms, alarmState, calibrationStored,
-                            displayOn, accessPointReady, resetReason, wifiClients, notify);
+                            displayOn, accessPointReady, resetReason, wifiClients,
+                            stationConfigured, stationConnected, mdnsReady, stationIp, notify);
 
     publishFirmwareUpdateStatus(notify);
 }
@@ -577,15 +585,19 @@ void BleTelemetryService::publishDashboardPackets(
     bool accessPointReady,
     const char* resetReason,
     uint8_t wifiClients,
+    bool stationConfigured,
+    bool stationConnected,
+    bool mdnsReady,
+    const uint8_t stationIp[4],
     bool notify)
 {
     // Cycle one compact data page per scheduled BLE update. This keeps the
     // link responsive on the ESP32-C3 while a newly connected app has a
-    // complete dashboard within six seconds.
+    // complete dashboard within seven seconds.
     uint8_t packet[BINARY_TELEMETRY_SIZE] = {};
     const Telemetry& telemetry = store.current();
     const Ina228ConfigurationStatus& config = sensor.configuration();
-    const uint8_t page = dashboardPacketIndex_++ % 6;
+    const uint8_t page = dashboardPacketIndex_++ % 7;
 
     switch (page) {
     case 0: {
@@ -676,7 +688,7 @@ void BleTelemetryService::publishDashboardPackets(
         packet[19] = (shunt.initialized ? 1 : 0) | (temperature.initialized ? 2 : 0);
         break;
     }
-    default:
+    case 5:
         packet[0] = DASHBOARD_ALARMS;
         packet[1] = (alarms.lowVoltageEnabled ? 1 : 0) |
                     (alarms.highVoltageEnabled ? 2 : 0) |
@@ -688,6 +700,16 @@ void BleTelemetryService::publishDashboardPackets(
         writeUint16LE(packet + 5, static_cast<uint16_t>(roundAndClamp(alarms.highVoltage, 1000.0f, 0, 65535)));
         writeInt24LE(packet + 7, roundAndClamp(alarms.maxAbsoluteCurrent, 1000.0f, 0, 8388607));
         writeInt32LE(packet + 10, roundAndClamp(alarms.maxTemperature, 10.0f, -1280, 1270));
+        break;
+    default:
+        packet[0] = DASHBOARD_WIFI;
+        packet[1] = (stationConfigured ? 1 : 0) |
+                    (stationConnected ? 2 : 0) |
+                    (mdnsReady ? 4 : 0);
+        packet[2] = stationIp[0];
+        packet[3] = stationIp[1];
+        packet[4] = stationIp[2];
+        packet[5] = stationIp[3];
         break;
     }
 
@@ -722,6 +744,19 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
         if (value.length() < 13) return;
         command = PendingCommand::SaveAlarms;
         break;
+    case CONTROL_CLEAR_WIFI: command = PendingCommand::ClearWifi; break;
+    case CONTROL_SAVE_WIFI: {
+        // command(1) + ssidLength(1) + ssid + passwordLength(1) + password + requestId(2)
+        if (value.length() < 6) return;
+        const uint8_t ssidLength = data[1];
+        if (ssidLength == 0 || ssidLength >= sizeof(WifiStationSettings::ssid)) return;
+        if (value.length() < static_cast<size_t>(3 + ssidLength)) return;
+        const uint8_t passwordLength = data[2 + ssidLength];
+        if (passwordLength >= sizeof(WifiStationSettings::password)) return;
+        if (value.length() != static_cast<size_t>(3 + ssidLength + passwordLength + 2)) return;
+        command = PendingCommand::SaveWifi;
+        break;
+    }
     default:
         return;
     }
@@ -741,6 +776,13 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
             owner_.pendingCurrentMa_.store(
                 static_cast<int32_t>(data[6]) | (static_cast<int32_t>(data[7]) << 8) | (static_cast<int32_t>(data[8]) << 16));
             owner_.pendingTemperatureDeciC_.store(readInt32LE(data + 9));
+        } else if (command == PendingCommand::SaveWifi) {
+            const uint8_t ssidLength = data[1];
+            const uint8_t passwordLength = data[2 + ssidLength];
+            memcpy(owner_.pendingWifiSettings_.ssid, data + 2, ssidLength);
+            owner_.pendingWifiSettings_.ssid[ssidLength] = '\0';
+            memcpy(owner_.pendingWifiSettings_.password, data + 3 + ssidLength, passwordLength);
+            owner_.pendingWifiSettings_.password[passwordLength] = '\0';
         }
         owner_.pendingCommand_.store(static_cast<uint8_t>(command));
     } else {
@@ -826,6 +868,20 @@ bool BleTelemetryService::consumeAlarmSaveRequested(
     settings.maxAbsoluteCurrent = pendingCurrentMa_.load() / 1000.0f;
     settings.maxTemperature = pendingTemperatureDeciC_.load() / 10.0f;
     return true;
+}
+
+bool BleTelemetryService::consumeWifiSaveRequested(
+    WifiStationSettings& settings,
+    uint16_t& requestId)
+{
+    if (!consumeCommand(PendingCommand::SaveWifi, requestId)) return false;
+    settings = pendingWifiSettings_;
+    return true;
+}
+
+bool BleTelemetryService::consumeWifiClearRequested(uint16_t& requestId)
+{
+    return consumeCommand(PendingCommand::ClearWifi, requestId);
 }
 
 void BleTelemetryService::maintain()

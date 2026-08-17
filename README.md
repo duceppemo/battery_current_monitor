@@ -150,11 +150,13 @@ characteristic for the Flutter app. Its fixed 20-byte format works without MTU
 negotiation; the complete contract is in
 [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md).
 
-Firmware 0.5.1 advertises `telemetry1,dashboard1,ota1,control1` in Device
+Firmware advertises `telemetry1,dashboard1,ota1,control1,wifi1` in Device
 Information. Binary telemetry and rotating dashboard pages update once per
 second. Dashboard commands include a request ID and return an explicit
 applied, rejected or failed result, so a client never has to infer success from
-a write response alone.
+a write response alone. Home Wi-Fi credentials can be set from the BLE app or
+the Web Dashboard, whichever is reachable at the time; the recovery AP is
+unaffected either way.
 
 ## Measurement configuration and calibration
 

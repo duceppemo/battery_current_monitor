@@ -12,6 +12,7 @@
 #include "energy/EnergyAccumulator.h"
 #include "alarm/AlarmSettings.h"
 #include "measurement/CalibrationSettings.h"
+#include "network/WifiSettings.h"
 #include "ota/FirmwareUpdateService.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
@@ -32,7 +33,9 @@ public:
                  const Ina228Sensor& sensor, const CurrentCalibration& calibration,
                  const DeviceAlarmSettings& alarms, const DeviceAlarmState& alarmState,
                  bool calibrationStored, bool displayOn, bool accessPointReady,
-                 const char* resetReason, uint8_t wifiClients);
+                 const char* resetReason, uint8_t wifiClients,
+                 bool stationConfigured, bool stationConnected, bool mdnsReady,
+                 const uint8_t stationIp[4]);
     void maintain();
 
     bool consumeResetExtremaRequested(uint16_t& requestId);
@@ -41,6 +44,8 @@ public:
     bool consumeCalibrationSaveRequested(CurrentCalibration& calibration, uint16_t& requestId);
     bool consumeCalibrationResetRequested(uint16_t& requestId);
     bool consumeAlarmSaveRequested(DeviceAlarmSettings& settings, uint16_t& requestId);
+    bool consumeWifiSaveRequested(WifiStationSettings& settings, uint16_t& requestId);
+    bool consumeWifiClearRequested(uint16_t& requestId);
     void reportControlResult(uint8_t command, uint16_t requestId, ControlResult result);
 
     bool connected() const { return connected_.load(); }
@@ -86,6 +91,8 @@ private:
         SaveCalibration,
         ResetCalibration,
         SaveAlarms,
+        SaveWifi,
+        ClearWifi,
         Writing = 255
     };
 
@@ -122,6 +129,10 @@ private:
         bool accessPointReady,
         const char* resetReason,
         uint8_t wifiClients,
+        bool stationConfigured,
+        bool stationConnected,
+        bool mdnsReady,
+        const uint8_t stationIp[4],
         bool notify
     );
     void publishFirmwareUpdateStatus(bool notify);
@@ -163,6 +174,11 @@ private:
     std::atomic_int32_t pendingHighVoltageMv_{0};
     std::atomic_int32_t pendingCurrentMa_{0};
     std::atomic_int32_t pendingTemperatureDeciC_{0};
+    // Guarded by the pendingCommand_ Writing/SaveWifi transition, same as the
+    // atomic pending* fields above; a plain struct is fine here because that
+    // transition already provides the needed happens-before edge between the
+    // BLE callback and the consuming main-loop read.
+    WifiStationSettings pendingWifiSettings_;
     std::atomic_uint8_t controlStatusCommand_{0};
     std::atomic_uint16_t controlStatusRequestId_{0};
     std::atomic_uint8_t controlStatusResult_{0};

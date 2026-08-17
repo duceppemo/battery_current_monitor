@@ -431,6 +431,27 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
             logRuntimeEvent("Device alarm save from BLE app failed.");
         }
     }
+
+    WifiStationSettings requestedWifi;
+    if (ble_.consumeWifiSaveRequested(requestedWifi, bleRequestId)) {
+        if (web_.saveWifiSettings(requestedWifi)) {
+            ble_.reportControlResult(7, bleRequestId, BleTelemetryService::ControlResult::Applied);
+            logRuntimeEvent("Wi-Fi station credentials saved from BLE app.");
+        } else {
+            ble_.reportControlResult(7, bleRequestId, BleTelemetryService::ControlResult::Failed);
+            logRuntimeEvent("Wi-Fi station save from BLE app failed.");
+        }
+    }
+
+    if (ble_.consumeWifiClearRequested(bleRequestId)) {
+        if (web_.clearWifiSettings()) {
+            ble_.reportControlResult(8, bleRequestId, BleTelemetryService::ControlResult::Applied);
+            logRuntimeEvent("Wi-Fi station credentials cleared from BLE app.");
+        } else {
+            ble_.reportControlResult(8, bleRequestId, BleTelemetryService::ControlResult::Failed);
+            logRuntimeEvent("Wi-Fi station clear from BLE app failed.");
+        }
+    }
 }
 
 void BatteryMonitorApp::resetPhysicalSessionState()
@@ -483,6 +504,8 @@ void BatteryMonitorApp::updateBle(uint32_t nowMs)
     }
 
     lastBleMs_ = nowMs;
+    uint8_t stationIp[4];
+    web_.stationIpOctets(stationIp);
     ble_.publish(
         telemetry_,
         energy_.totals(),
@@ -494,7 +517,11 @@ void BatteryMonitorApp::updateBle(uint32_t nowMs)
         display_.isOn(),
         web_.accessPointReady(),
         resetReason_,
-        web_.clientCount()
+        web_.clientCount(),
+        web_.stationConfigured(),
+        web_.stationConnected(),
+        web_.mdnsReady(),
+        stationIp
     );
 }
 

@@ -69,6 +69,7 @@ JSON and BLE.
 4. [x] Add user-approved CSV export from the app-local session log. Consider bounded LittleFS persistence and wear limits only as a separate device-side feature.
 5. Make session-counter persistence opt-in and crash-safe.
 6. [x] Add configurable Wi-Fi station/AP modes, credentials and mDNS. Keep the `BatteryMonitor` AP as a concurrent recovery path, store credentials in a dedicated NVS namespace and retry station association without blocking measurements.
+7. [x] Let the BLE app set and clear home Wi-Fi station credentials too, so a phone never has to leave its own network to join the monitor's recovery AP just to configure it. The Web Dashboard path stays available as an alternative.
 
 **Done when:** memory limits are documented, exports carry timestamps and units, and no network operation blocks measurement polling.
 
