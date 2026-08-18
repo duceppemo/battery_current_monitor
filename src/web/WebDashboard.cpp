@@ -88,6 +88,7 @@ void WebDashboard::begin(
     server_.on("/api/wifi/clear", HTTP_POST, [this]() { handleWifiClear(); });
     server_.on("/api/battery/save", HTTP_POST, [this]() { handleBatterySave(); });
     server_.on("/api/battery/sync", HTTP_POST, [this]() { handleBatterySync(); });
+    server_.on("/api/battery/reset-history", HTTP_POST, [this]() { handleBatteryHistoryReset(); });
     server_.on("/api/firmware", HTTP_POST,
         [this]() {
             if (firmwareUpdateSucceeded_) {
@@ -202,6 +203,11 @@ bool WebDashboard::consumeBatteryProfileSaveRequested(BatteryProfileSettings& se
 bool WebDashboard::consumeBatterySyncRequested()
 {
     return consumeCommand(PendingCommand::SyncBatteryFull);
+}
+
+bool WebDashboard::consumeBatteryHistoryResetRequested()
+{
+    return consumeCommand(PendingCommand::ResetBatteryHistory);
 }
 
 void WebDashboard::setCalibrationStatus(const char* status)
@@ -453,6 +459,13 @@ void WebDashboard::handleTelemetry()
     json += stateOfCharge_->hasTimeToEmpty() ? "true" : "false";
     json += ",\"timeToEmptySeconds\":";
     appendUnsigned(json, stateOfCharge_->hasTimeToEmpty() ? stateOfCharge_->timeToEmptySeconds() : 0);
+    json += ",\"deepestDischargePercent\":";
+    appendNullableFloat(json, true, stateOfCharge_->deepestDischargePercent(), 1);
+    json += ",\"fullChargeCycles\":";
+    appendUnsigned(json, stateOfCharge_->fullChargeCycles());
+    json += ",\"averageDischargeDepthPercent\":";
+    appendNullableFloat(json, stateOfCharge_->fullChargeCycles() > 0,
+                         stateOfCharge_->averageDischargeDepthPercent(), 1);
     json += "}";
 
     const Ina228ConfigurationStatus& configuration = sensor_->configuration();
@@ -645,6 +658,15 @@ void WebDashboard::handleBatterySave()
 void WebDashboard::handleBatterySync()
 {
     if (!queueCommand(PendingCommand::SyncBatteryFull)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleBatteryHistoryReset()
+{
+    if (!queueCommand(PendingCommand::ResetBatteryHistory)) {
         server_.send(409, "application/json", "{\"error\":\"command pending\"}");
         return;
     }

@@ -51,6 +51,8 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 - Coulomb-counted state of charge and time-to-empty, persisted across
   reboots, with auto and manual full-charge resync (separate from the
   power-cycle-scoped session Ah/Wh above)
+- Deepest-discharge, full-charge-cycle-count and average-discharge-depth
+  history, persisted alongside the fuel gauge and independently resettable
 - Min/max tracking for all measured/calculated metrics
 - Persistent low/high-voltage, current, temperature and sensor-health alarms
 - SSD1309 OLED
@@ -137,7 +139,7 @@ profile is saved and synced to full at least once.
 
 It provides grouped controls beside the affected data: separate extrema and
 session-energy resets, OLED power, guided calibration, persistent alarm
-limits, battery profile setup and manual full-charge sync, home Wi-Fi setup
+limits, battery profile setup, manual full-charge sync and history reset, home Wi-Fi setup
 and Web OTA. The update card shows both the installed firmware version and
 the version detected in a selected OTA image before upload.
 

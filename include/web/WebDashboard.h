@@ -37,6 +37,7 @@ public:
     bool clearWifiSettings();
     bool consumeBatteryProfileSaveRequested(BatteryProfileSettings& settings);
     bool consumeBatterySyncRequested();
+    bool consumeBatteryHistoryResetRequested();
 
     void setRuntimeStatus(
         bool bleConnected,
@@ -64,7 +65,8 @@ private:
         ResetCalibration,
         SaveAlarms,
         SaveBatteryProfile,
-        SyncBatteryFull
+        SyncBatteryFull,
+        ResetBatteryHistory
     };
 
     void handleRoot();
@@ -79,6 +81,7 @@ private:
     void handleWifiClear();
     void handleBatterySave();
     void handleBatterySync();
+    void handleBatteryHistoryReset();
     void handleFirmwareUpload();
     void handleNotFound();
     bool startAccessPoint();

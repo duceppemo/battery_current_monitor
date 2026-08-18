@@ -96,14 +96,19 @@ JSON and BLE.
    profile's charged voltage with a tapering (near-zero) current for a
    sustained period, or manually from Web/BLE. Time-to-go only applies while
    net discharging, using a smoothed current average.
-3. Validate the coulomb-counted capacity and auto-sync behavior against a
-   real charge/discharge cycle once the planned 0.5 mOhm Kelvin shunt (Phase
-   3) is in place; the current 15 mOhm prototype shunt's accuracy hasn't been
-   validated under load yet.
+3. [x] Track deepest-discharge, full-charge-cycle-count and
+   average-discharge-depth history alongside the fuel gauge, persisted the
+   same way and clearable independently (e.g. after replacing the physical
+   battery) without touching the current charge level.
+4. Validate the coulomb-counted capacity, auto-sync and history behavior
+   against a real charge/discharge cycle once the planned 0.5 mOhm Kelvin
+   shunt (Phase 3) is in place; the current 15 mOhm prototype shunt's
+   accuracy hasn't been validated under load yet.
 
-**Done when:** SoC and time-to-go read consistently across OLED, Web
-Dashboard and BLE app, survive a reboot, and a full-charge sync (auto or
-manual) reliably returns to 100%.
+**Done when:** SoC, time-to-go and history stats read consistently across
+Web Dashboard and BLE app (SoC/time-to-go also on the OLED), survive a
+reboot, and a full-charge sync (auto or manual) reliably returns to 100%
+while updating cycle history.
 
 ## Non-goals until earlier phases pass
 

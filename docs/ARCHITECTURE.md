@@ -79,8 +79,12 @@ every boot), this must survive reboots to be a useful fuel gauge, so it
 persists its running state to its own NVS namespace periodically (not on
 every sample, to bound flash writes) and has no notion of "correct" SoC until
 a full-charge sync happens — automatically (sustained voltage at or above the
-charged voltage with a tapering current) or manually from Web/BLE. Web and
-BLE profile-save/sync requests are validated and applied by
+charged voltage with a tapering current) or manually from Web/BLE. It also
+tracks deepest-discharge, full-charge-cycle-count and average-discharge-depth
+history in the same persisted state, updated continuously (deepest discharge)
+or at each full-charge sync (cycle count and average depth) and clearable
+independently of the current charge level via a dedicated reset. Web and BLE
+profile-save/sync/history-reset requests are validated and applied by
 `BatteryMonitorApp`, matching the calibration/alarm boundary.
 
 ### `TelemetryStore`

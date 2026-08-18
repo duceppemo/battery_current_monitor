@@ -427,6 +427,11 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         logRuntimeEvent("Battery fuel gauge synced to full from web UI.");
     }
 
+    if (web_.consumeBatteryHistoryResetRequested()) {
+        stateOfCharge_.resetHistory();
+        logRuntimeEvent("Battery history reset from web UI.");
+    }
+
     if (ble_.consumeCalibrationSaveRequested(requestedCalibration, bleRequestId)) {
         if (calibration_.save(requestedCalibration)) {
             sensor_.setCalibration(calibration_.current());
@@ -499,6 +504,12 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         stateOfCharge_.syncToFull(batteryProfile_.current());
         ble_.reportControlResult(10, bleRequestId, BleTelemetryService::ControlResult::Applied);
         logRuntimeEvent("Battery fuel gauge synced to full from BLE app.");
+    }
+
+    if (ble_.consumeBatteryHistoryResetRequested(bleRequestId)) {
+        stateOfCharge_.resetHistory();
+        ble_.reportControlResult(11, bleRequestId, BleTelemetryService::ControlResult::Applied);
+        logRuntimeEvent("Battery history reset from BLE app.");
     }
 }
 

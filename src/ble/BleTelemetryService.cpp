@@ -69,6 +69,7 @@ namespace
     constexpr uint8_t CONTROL_CLEAR_WIFI = 8;
     constexpr uint8_t CONTROL_SAVE_BATTERY_PROFILE = 9;
     constexpr uint8_t CONTROL_SYNC_BATTERY_FULL = 10;
+    constexpr uint8_t CONTROL_RESET_BATTERY_HISTORY = 11;
     constexpr size_t FIRMWARE_UPDATE_STATUS_SIZE = 12;
     constexpr size_t CONTROL_STATUS_SIZE = 6;
 
@@ -730,6 +731,12 @@ void BleTelemetryService::publishDashboardPackets(
             batteryProfile.capacityAh, 1000.0f, 0, std::numeric_limits<int32_t>::max())));
         writeUint16LE(packet + 12, static_cast<uint16_t>(roundAndClamp(
             batteryProfile.chargedVoltage, 1000.0f, 0, 65535)));
+        writeUint16LE(packet + 14, static_cast<uint16_t>(roundAndClamp(
+            stateOfCharge.deepestDischargePercent(), 10.0f, 0, 1000)));
+        writeUint16LE(packet + 16, static_cast<uint16_t>(
+            stateOfCharge.fullChargeCycles() > 65535 ? 65535 : stateOfCharge.fullChargeCycles()));
+        writeUint16LE(packet + 18, static_cast<uint16_t>(roundAndClamp(
+            stateOfCharge.averageDischargeDepthPercent(), 10.0f, 0, 1000)));
         break;
     }
     }
@@ -767,6 +774,7 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
         break;
     case CONTROL_CLEAR_WIFI: command = PendingCommand::ClearWifi; break;
     case CONTROL_SYNC_BATTERY_FULL: command = PendingCommand::SyncBatteryFull; break;
+    case CONTROL_RESET_BATTERY_HISTORY: command = PendingCommand::ResetBatteryHistory; break;
     case CONTROL_SAVE_BATTERY_PROFILE:
         // command(1) + capacity milli-Ah u32(4) + charged voltage mV u16(2) + requestId(2)
         if (value.length() < 9) return;
@@ -928,6 +936,11 @@ bool BleTelemetryService::consumeBatteryProfileSaveRequested(
 bool BleTelemetryService::consumeBatterySyncRequested(uint16_t& requestId)
 {
     return consumeCommand(PendingCommand::SyncBatteryFull, requestId);
+}
+
+bool BleTelemetryService::consumeBatteryHistoryResetRequested(uint16_t& requestId)
+{
+    return consumeCommand(PendingCommand::ResetBatteryHistory, requestId);
 }
 
 void BleTelemetryService::maintain()

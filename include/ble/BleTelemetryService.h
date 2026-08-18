@@ -51,6 +51,7 @@ public:
     bool consumeWifiClearRequested(uint16_t& requestId);
     bool consumeBatteryProfileSaveRequested(BatteryProfileSettings& settings, uint16_t& requestId);
     bool consumeBatterySyncRequested(uint16_t& requestId);
+    bool consumeBatteryHistoryResetRequested(uint16_t& requestId);
     void reportControlResult(uint8_t command, uint16_t requestId, ControlResult result);
 
     bool connected() const { return connected_.load(); }
@@ -100,6 +101,7 @@ private:
         ClearWifi,
         SaveBatteryProfile,
         SyncBatteryFull,
+        ResetBatteryHistory,
         Writing = 255
     };
 

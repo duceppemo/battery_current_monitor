@@ -39,6 +39,7 @@ public:
     void begin();
     void update(const Telemetry& sample, const BatteryProfileSettings& profile, uint32_t nowMs);
     void syncToFull(const BatteryProfileSettings& profile);
+    void resetHistory();
 
     bool known() const { return synced_; }
     float percent(const BatteryProfileSettings& profile) const;
@@ -46,8 +47,15 @@ public:
     bool hasTimeToEmpty() const;
     uint32_t timeToEmptySeconds() const;
 
+    // Persisted alongside the running state above, across reboots, until
+    // explicitly reset (e.g. when the physical battery is replaced).
+    float deepestDischargePercent() const { return deepestDischargePercent_; }
+    uint32_t fullChargeCycles() const { return fullChargeCycles_; }
+    float averageDischargeDepthPercent() const;
+
 private:
     void checkAutoSync(const Telemetry& sample, const BatteryProfileSettings& profile, uint32_t nowMs);
+    void trackDeepestDischarge(const BatteryProfileSettings& profile);
     void persistIfDue(uint32_t nowMs, bool force);
 
     Telemetry previous_;
@@ -59,4 +67,7 @@ private:
     bool fullChargeConditionActive_ = false;
     uint32_t lastPersistMs_ = 0;
     bool dirty_ = false;
+    float deepestDischargePercent_ = 0.0f;
+    uint32_t fullChargeCycles_ = 0;
+    float dischargeDepthSumPercent_ = 0.0f;
 };
