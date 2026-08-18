@@ -204,19 +204,21 @@ void OledDisplay::showLivePage(
 
     oled_.setFont(u8g2_font_5x8_tf);
     if (socKnown) {
-        snprintf(left, sizeof(left), "%.0f%%", static_cast<double>(socPercent));
+        snprintf(left, sizeof(left), "SoC:%.0f%%", static_cast<double>(socPercent));
     } else {
-        snprintf(left, sizeof(left), "--%%");
+        snprintf(left, sizeof(left), "SoC:--%%");
     }
     oled_.drawStr(2, 8, left);
     snprintf(
-        left,
-        sizeof(left),
+        right,
+        sizeof(right),
         "B:%c W:%u",
         bleConnected ? 'C' : '-',
         static_cast<unsigned>(wifiClients)
     );
-    oled_.drawStr(58, 8, left);
+    // The "SoC:" prefix makes this segment's width vary with the percent's
+    // digit count, so measure it rather than assume a fixed column.
+    oled_.drawStr(2 + oled_.getStrWidth(left) + 4, 8, right);
     oled_.drawStr(108, 8, "1/2");
 
     oled_.setFont(u8g2_font_6x12_tf);
