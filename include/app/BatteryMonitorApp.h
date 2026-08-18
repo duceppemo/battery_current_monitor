@@ -11,6 +11,7 @@
 #include "input/DebouncedButton.h"
 #include "measurement/CalibrationSettings.h"
 #include "mqtt/MqttPublisher.h"
+#include "naming/DeviceNameSettings.h"
 #include "notify/NtfyNotifier.h"
 #include "ota/FirmwareUpdateService.h"
 #include "protection/LoadProtection.h"
@@ -54,6 +55,7 @@ private:
     MqttPublisher mqttPublisher_;
     NtfySettings ntfySettings_;
     NtfyNotifier ntfyNotifier_;
+    DeviceNameSettings deviceNameSettings_;
     LoadProtectionSettings loadProtectionSettings_;
     LoadProtectionMonitor loadProtectionMonitor_;
     EnergyPersistenceSettings energyPersistenceSettings_;

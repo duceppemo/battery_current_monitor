@@ -143,6 +143,27 @@ type in this project, MQTT save requests are accepted only from
 `WebDashboard`; there is intentionally no BLE control for it, since it is
 meaningless without the home Wi-Fi station already connected.
 
+### `DeviceNameSettings`
+
+Owns one optional NVS string (empty means "not customized"), settable from
+both the Web Dashboard and BLE control command `17` -- unlike every other
+BLE-only-or-Web-only setting in this project, this one is deliberately
+symmetric: the device is reachable from either transport, and its name is
+the single thing both need to agree on, so it doesn't make sense for either
+transport to own a separate copy. `computeEffectiveName()` resolves what's
+actually shown: the stored name if set, otherwise `"Battery Monitor "` plus
+the last 4 hex characters of `ID` (the same eFuse-derived fragment BLE's
+Device Information `ID` field and the app's own address-based scan-time
+default both already use, so a fresh device's name looks the same
+everywhere before anyone renames it). `BleTelemetryService` rebuilds Device
+Information's `NAME=` field every publish cycle so a rename from either
+transport becomes visible without a reconnect, and additionally calls
+`refreshDeviceInfo()` immediately after a successful save (see
+`BleTelemetryService::refreshDeviceInfo`) rather than waiting for the next
+cycle -- a client that re-reads Device Information right after an `Applied`
+control result, to confirm what it just set, would otherwise race the
+once-per-second publish cadence and read a stale name.
+
 ### `NtfySettings` and `NtfyNotifier`
 
 `NtfySettings` owns one validated NVS profile (server URL, topic, enabled

@@ -225,6 +225,31 @@ push notification's title/message arrived on ntfy.sh. Confirmed it does not
 repeat while the alarm stays active (edge-triggered), and fires again on a
 fresh rising edge after clearing and re-tripping.
 
+## Phase 11 — Device naming
+
+1. [x] Add an optional, device-side `DeviceNameSettings` (NVS-backed, empty
+   means "not customized"): settable from the Web Dashboard and from BLE
+   control command `17`, and readable from both -- the Web Dashboard's page
+   header and the BLE Device Information `NAME=` field (gated on the
+   `name1` capability) always agree, since neither transport owns a
+   separate copy. The default when never customized is generated from the
+   chip ID (`Battery Monitor <last 4 hex of ID>`), matching the fragment
+   the companion app already showed at scan time before this existed.
+2. [x] Fix a real race found while testing the app-side rename-and-verify
+   flow: Device Information's `NAME=` field only rebuilt on the normal
+   once-per-second publish cycle, so a client re-reading it immediately
+   after an `Applied` control result (to confirm what it just set) could
+   still see the pre-rename value. Fixed by having the rename handler call
+   `BleTelemetryService::refreshDeviceInfo()` immediately, before
+   acknowledging the control command, rather than waiting for the next
+   cycle.
+
+**Verified end-to-end**: renamed via the Web Dashboard and confirmed the
+change over a live BLE Device Information read; renamed via a raw BLE
+control-command write and confirmed the change on the Web Dashboard;
+renamed via the companion app while connected and confirmed both the app's
+own UI and the Web Dashboard updated immediately, with no stale read.
+
 ## Non-goals until earlier phases pass
 
 - Persisting energy counters before their accuracy and reset semantics are proven.

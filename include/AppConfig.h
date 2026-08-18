@@ -6,7 +6,7 @@ namespace Config
 {
     // Keep the release version in one place. The preprocessor string literal is
     // also embedded in OTA images for the dashboard's selected-file check.
-#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.17"
+#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.18"
     constexpr char FIRMWARE_VERSION[] = BATTERY_MONITOR_FIRMWARE_VERSION;
     // Deliberately retained in the application image so the Web Dashboard can
     // identify a selected OTA .bin before it is written to the inactive slot.

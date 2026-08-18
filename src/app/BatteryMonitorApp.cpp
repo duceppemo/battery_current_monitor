@@ -168,6 +168,7 @@ void BatteryMonitorApp::begin()
     stateOfCharge_.begin();
     mqttSettings_.begin();
     ntfySettings_.begin();
+    deviceNameSettings_.begin();
     loadProtectionSettings_.begin();
     loadProtectionMonitor_.begin();
     energyPersistenceSettings_.begin();
@@ -202,7 +203,8 @@ void BatteryMonitorApp::begin()
     web_.begin(
         telemetry_, energy_.totals(), sensor_, calibration_, alarms_, alarmMonitor_,
         firmwareUpdate_, batteryProfile_, stateOfCharge_, mqttSettings_, mqttPublisher_,
-        loadProtectionSettings_, loadProtectionMonitor_, energyPersistenceSettings_, ntfySettings_
+        loadProtectionSettings_, loadProtectionMonitor_, energyPersistenceSettings_, ntfySettings_,
+        deviceNameSettings_
     );
     bootCheckpoint = 8;
     web_.setCalibrationStatus(
@@ -457,6 +459,16 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         }
     }
 
+    DeviceNameConfig requestedDeviceName;
+    if (web_.consumeDeviceNameSaveRequested(requestedDeviceName)) {
+        if (deviceNameSettings_.save(requestedDeviceName)) {
+            ble_.refreshDeviceInfo(deviceNameSettings_.current());
+            logRuntimeEvent("Device name saved from web UI.");
+        } else {
+            logRuntimeEvent("Device name save from web UI failed.");
+        }
+    }
+
     LoadProtectionConfig requestedProtection;
     if (web_.consumeLoadProtectionSaveRequested(requestedProtection)) {
         if (loadProtectionSettings_.save(requestedProtection)) {
@@ -638,6 +650,22 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
             logRuntimeEvent("Energy persistence setting save from BLE app failed.");
         }
     }
+
+    DeviceNameConfig requestedDeviceNameBle;
+    if (ble_.consumeDeviceNameSaveRequested(requestedDeviceNameBle, bleRequestId)) {
+        if (deviceNameSettings_.save(requestedDeviceNameBle)) {
+            // Update Device Information before acknowledging: a client
+            // that re-reads it right after seeing "Applied" (to confirm
+            // what it set) must not race the normal once-per-second
+            // publish() refresh.
+            ble_.refreshDeviceInfo(deviceNameSettings_.current());
+            ble_.reportControlResult(17, bleRequestId, BleTelemetryService::ControlResult::Applied);
+            logRuntimeEvent("Device name saved from BLE app.");
+        } else {
+            ble_.reportControlResult(17, bleRequestId, BleTelemetryService::ControlResult::Failed);
+            logRuntimeEvent("Device name save from BLE app failed.");
+        }
+    }
 }
 
 void BatteryMonitorApp::resetPhysicalSessionState()
@@ -718,7 +746,8 @@ void BatteryMonitorApp::updateBle(uint32_t nowMs)
         stateOfCharge_,
         loadProtectionSettings_.current(),
         loadProtectionMonitor_,
-        energyPersistenceSettings_.current()
+        energyPersistenceSettings_.current(),
+        deviceNameSettings_.current()
     );
 }
 

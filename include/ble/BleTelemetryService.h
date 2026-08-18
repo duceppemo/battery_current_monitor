@@ -13,6 +13,7 @@
 #include "energy/StateOfChargeEstimator.h"
 #include "alarm/AlarmSettings.h"
 #include "measurement/CalibrationSettings.h"
+#include "naming/DeviceNameSettings.h"
 #include "network/WifiSettings.h"
 #include "ota/FirmwareUpdateService.h"
 #include "protection/LoadProtection.h"
@@ -31,6 +32,13 @@ public:
     BleTelemetryService();
 
     void begin(FirmwareUpdateService& firmwareUpdate);
+    // Rebuilds and sets the Device Information characteristic immediately,
+    // rather than waiting for the next publish() cycle (up to
+    // BLE_INTERVAL_MS later). A client that just wrote a new name and
+    // acknowledges the control result before re-reading Device Information
+    // -- to confirm what it set -- would otherwise race the normal publish
+    // cadence and see the stale value.
+    void refreshDeviceInfo(const DeviceNameConfig& deviceName);
     void publish(const TelemetryStore& store, const EnergyTotals& energy,
                  const Ina228Sensor& sensor, const CurrentCalibration& calibration,
                  const DeviceAlarmSettings& alarms, const DeviceAlarmState& alarmState,
@@ -42,7 +50,8 @@ public:
                  const StateOfChargeEstimator& stateOfCharge,
                  const LoadProtectionConfig& loadProtection,
                  const LoadProtectionMonitor& loadProtectionMonitor,
-                 const EnergyPersistenceConfig& energyPersistence);
+                 const EnergyPersistenceConfig& energyPersistence,
+                 const DeviceNameConfig& deviceName);
     void maintain();
 
     bool consumeResetExtremaRequested(uint16_t& requestId);
@@ -61,6 +70,7 @@ public:
     bool consumeLoadProtectionTestConnectRequested(uint16_t& requestId);
     bool consumeLoadProtectionTestDisconnectRequested(uint16_t& requestId);
     bool consumeEnergyPersistenceSaveRequested(EnergyPersistenceConfig& settings, uint16_t& requestId);
+    bool consumeDeviceNameSaveRequested(DeviceNameConfig& settings, uint16_t& requestId);
     void reportControlResult(uint8_t command, uint16_t requestId, ControlResult result);
 
     bool connected() const { return connected_.load(); }
@@ -116,6 +126,7 @@ private:
         TestConnectLoad,
         TestDisconnectLoad,
         SaveEnergyPersistence,
+        SaveDeviceName,
         Writing = 255
     };
 
@@ -140,6 +151,7 @@ private:
     static BLECharacteristic* createControlStatusCharacteristic(BLEService* service);
     static BLECharacteristic* createFirmwareTransferCharacteristic(BLEService* service);
     void startAdvertising();
+    void buildDeviceInfo(const DeviceNameConfig& deviceName, char* out, size_t outSize) const;
     void publishDashboardPackets(
         const TelemetryStore& store,
         const EnergyTotals& energy,
@@ -212,6 +224,9 @@ private:
     std::atomic_int32_t pendingProtectionLowVoltageMv_{0};
     std::atomic_int32_t pendingProtectionLowSocDeciPercent_{0};
     std::atomic_uint8_t pendingEnergyPersistenceEnabled_{0};
+    // Same guarantee as pendingWifiSettings_ above: guarded by the
+    // pendingCommand_ Writing/SaveDeviceName transition.
+    DeviceNameConfig pendingDeviceName_;
     std::atomic_uint8_t controlStatusCommand_{0};
     std::atomic_uint16_t controlStatusRequestId_{0};
     std::atomic_uint8_t controlStatusResult_{0};

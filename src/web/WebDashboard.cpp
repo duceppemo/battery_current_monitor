@@ -89,6 +89,15 @@ namespace
         return NtfySettings::isValid(settings);
     }
 
+    bool parseDeviceNameSettings(WebServer& server, DeviceNameConfig& settings)
+    {
+        if (!server.hasArg("name")) return false;
+        const String name = server.arg("name");
+        if (name.length() >= sizeof(settings.name)) return false;
+        snprintf(settings.name, sizeof(settings.name), "%s", name.c_str());
+        return DeviceNameSettings::isValid(settings);
+    }
+
     bool parseLoadProtectionSettings(WebServer& server, LoadProtectionConfig& settings)
     {
         if (!parseFiniteFloat(server, "lowVoltage", settings.lowVoltageThreshold) ||
@@ -120,7 +129,8 @@ void WebDashboard::begin(
     const LoadProtectionSettings& loadProtectionSettings,
     LoadProtectionMonitor& loadProtectionMonitor,
     const EnergyPersistenceSettings& energyPersistenceSettings,
-    const NtfySettings& ntfySettings)
+    const NtfySettings& ntfySettings,
+    const DeviceNameSettings& deviceNameSettings)
 {
     store_ = &store;
     energyTotals_ = &energyTotals;
@@ -137,6 +147,7 @@ void WebDashboard::begin(
     loadProtectionMonitor_ = &loadProtectionMonitor;
     energyPersistenceSettings_ = &energyPersistenceSettings;
     ntfySettings_ = &ntfySettings;
+    deviceNameSettings_ = &deviceNameSettings;
     telemetryJson_.reserve(1400);
 
     WiFi.persistent(false);
@@ -159,6 +170,7 @@ void WebDashboard::begin(
     server_.on("/api/battery/reset-history", HTTP_POST, [this]() { handleBatteryHistoryReset(); });
     server_.on("/api/mqtt/save", HTTP_POST, [this]() { handleMqttSave(); });
     server_.on("/api/ntfy/save", HTTP_POST, [this]() { handleNtfySave(); });
+    server_.on("/api/device-name/save", HTTP_POST, [this]() { handleDeviceNameSave(); });
     server_.on("/api/protection/save", HTTP_POST, [this]() { handleLoadProtectionSave(); });
     server_.on("/api/protection/reconnect", HTTP_POST, [this]() { handleLoadProtectionReconnect(); });
     server_.on("/api/protection/test-disconnect", HTTP_POST, [this]() { handleLoadProtectionTestDisconnect(); });
@@ -310,6 +322,13 @@ bool WebDashboard::consumeNtfySettingsSaveRequested(NtfyConfig& settings)
 {
     if (!consumeCommand(PendingCommand::SaveNtfySettings)) return false;
     settings = pendingNtfySettings_;
+    return true;
+}
+
+bool WebDashboard::consumeDeviceNameSaveRequested(DeviceNameConfig& settings)
+{
+    if (!consumeCommand(PendingCommand::SaveDeviceName)) return false;
+    settings = pendingDeviceName_;
     return true;
 }
 
@@ -541,17 +560,26 @@ bool WebDashboard::buildTelemetryJson(String& json)
         batteryProfile_ == nullptr || stateOfCharge_ == nullptr ||
         mqttSettings_ == nullptr || mqttPublisher_ == nullptr ||
         loadProtectionSettings_ == nullptr || loadProtectionMonitor_ == nullptr ||
-        energyPersistenceSettings_ == nullptr || ntfySettings_ == nullptr) {
+        energyPersistenceSettings_ == nullptr || ntfySettings_ == nullptr ||
+        deviceNameSettings_ == nullptr) {
         return false;
     }
 
     const Telemetry& t = store_->current();
 
+    char deviceNameBuffer[33];
+    DeviceNameSettings::computeEffectiveName(
+        deviceNameSettings_->current(), deviceNameBuffer, sizeof(deviceNameBuffer));
+
     json = "{\"firmwareVersion\":\"";
     json += Config::FIRMWARE_VERSION;
     json += "\",\"firmwareImageMarker\":\"";
     json += Config::FIRMWARE_IMAGE_MARKER;
-    json += "\",";
+    json += "\",\"deviceName\":";
+    appendJsonString(json, deviceNameBuffer);
+    json += ",\"deviceNameCustomized\":";
+    json += deviceNameSettings_->current().name[0] != '\0' ? "true" : "false";
+    json += ",";
 
     appendMetric(json, "voltage", t.voltageValid(), t.voltage, store_->voltageStats(), 6);
     json += ",";
@@ -886,6 +914,17 @@ void WebDashboard::handleNtfySave()
         return;
     }
     pendingNtfySettings_ = requested;
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleDeviceNameSave()
+{
+    DeviceNameConfig requested;
+    if (!parseDeviceNameSettings(server_, requested) || !queueCommand(PendingCommand::SaveDeviceName)) {
+        server_.send(400, "application/json", "{\"error\":\"invalid device name\"}");
+        return;
+    }
+    pendingDeviceName_ = requested;
     server_.send(202, "application/json", "{\"ok\":true}");
 }
 

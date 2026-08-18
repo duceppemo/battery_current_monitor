@@ -76,6 +76,7 @@ namespace
     constexpr uint8_t CONTROL_TEST_CONNECT_LOAD = 14;
     constexpr uint8_t CONTROL_TEST_DISCONNECT_LOAD = 15;
     constexpr uint8_t CONTROL_SAVE_ENERGY_PERSISTENCE = 16;
+    constexpr uint8_t CONTROL_SAVE_DEVICE_NAME = 17;
     constexpr size_t FIRMWARE_UPDATE_STATUS_SIZE = 12;
     constexpr size_t CONTROL_STATUS_SIZE = 6;
 
@@ -359,18 +360,8 @@ void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
     // erases. That makes it a stable per-chip identity independent of a
     // phone's own BLE address for the peripheral, which iOS in particular
     // exposes as a privacy-scoped identifier that can change over time.
-    char idHex[16];
-    snprintf(idHex, sizeof(idHex), "%012llX",
-        static_cast<unsigned long long>(ESP.getEfuseMac()));
-    char deviceInfo[128];
-    snprintf(
-        deviceInfo,
-        sizeof(deviceInfo),
-        "FW=%s;HW=%s;ID=%s;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1,energyp1",
-        Config::FIRMWARE_VERSION,
-        Config::HARDWARE_REVISION,
-        idHex
-    );
+    char deviceInfo[200];
+    buildDeviceInfo(DeviceNameConfig{}, deviceInfo, sizeof(deviceInfo));
     deviceInfoCharacteristic_->setValue(deviceInfo);
 
     service->start();
@@ -430,6 +421,37 @@ void BleTelemetryService::startAdvertising()
     Serial.printf("BLE advertising as \"%s\"\n", Config::BLE_DEVICE_NAME);
 }
 
+void BleTelemetryService::buildDeviceInfo(const DeviceNameConfig& deviceName, char* out, size_t outSize) const
+{
+    // ESP.getEfuseMac() is the factory-programmed base MAC burned into the
+    // chip's eFuse at manufacture; unlike WiFi.macAddress() it never depends
+    // on which radio interface (AP/STA) queried it, and it survives NVS
+    // erases. That makes it a stable per-chip identity independent of a
+    // phone's own BLE address for the peripheral, which iOS in particular
+    // exposes as a privacy-scoped identifier that can change over time.
+    char idHex[16];
+    snprintf(idHex, sizeof(idHex), "%012llX",
+        static_cast<unsigned long long>(ESP.getEfuseMac()));
+    char name[33];
+    DeviceNameSettings::computeEffectiveName(deviceName, name, sizeof(name));
+    snprintf(
+        out,
+        outSize,
+        "FW=%s;HW=%s;ID=%s;NAME=%s;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1,energyp1,name1",
+        Config::FIRMWARE_VERSION,
+        Config::HARDWARE_REVISION,
+        idHex,
+        name
+    );
+}
+
+void BleTelemetryService::refreshDeviceInfo(const DeviceNameConfig& deviceName)
+{
+    char deviceInfo[200];
+    buildDeviceInfo(deviceName, deviceInfo, sizeof(deviceInfo));
+    deviceInfoCharacteristic_->setValue(deviceInfo);
+}
+
 void BleTelemetryService::updateCharacteristic(
     BLECharacteristic* characteristic,
     const char* value,
@@ -475,11 +497,19 @@ void BleTelemetryService::publish(
     const StateOfChargeEstimator& stateOfCharge,
     const LoadProtectionConfig& loadProtection,
     const LoadProtectionMonitor& loadProtectionMonitor,
-    const EnergyPersistenceConfig& energyPersistence)
+    const EnergyPersistenceConfig& energyPersistence,
+    const DeviceNameConfig& deviceName)
 {
     const Telemetry& telemetry = store.current();
     const bool notify = connected();
     char buffer[128];
+
+    // Cheap to rebuild every cycle (same cadence as the dashboard packets
+    // below) so a name change made from either transport is visible without
+    // waiting for a reconnect.
+    char deviceInfo[200];
+    buildDeviceInfo(deviceName, deviceInfo, sizeof(deviceInfo));
+    deviceInfoCharacteristic_->setValue(deviceInfo);
 
     if (telemetry.voltageValid()) {
         snprintf(buffer, sizeof(buffer), "%.3f", telemetry.voltage);
@@ -844,6 +874,15 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
         command = PendingCommand::SaveWifi;
         break;
     }
+    case CONTROL_SAVE_DEVICE_NAME: {
+        // command(1) + nameLength(1) + name + requestId(2)
+        if (value.length() < 4) return;
+        const uint8_t nameLength = data[1];
+        if (nameLength >= sizeof(DeviceNameConfig::name)) return;
+        if (value.length() != static_cast<size_t>(2 + nameLength + 2)) return;
+        command = PendingCommand::SaveDeviceName;
+        break;
+    }
     default:
         return;
     }
@@ -881,6 +920,10 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
             owner_.pendingProtectionLowSocDeciPercent_.store(data[4] | (data[5] << 8));
         } else if (command == PendingCommand::SaveEnergyPersistence) {
             owner_.pendingEnergyPersistenceEnabled_.store(data[1]);
+        } else if (command == PendingCommand::SaveDeviceName) {
+            const uint8_t nameLength = data[1];
+            memcpy(owner_.pendingDeviceName_.name, data + 2, nameLength);
+            owner_.pendingDeviceName_.name[nameLength] = '\0';
         }
         owner_.pendingCommand_.store(static_cast<uint8_t>(command));
     } else {
@@ -1033,6 +1076,15 @@ bool BleTelemetryService::consumeEnergyPersistenceSaveRequested(
 {
     if (!consumeCommand(PendingCommand::SaveEnergyPersistence, requestId)) return false;
     settings.enabled = pendingEnergyPersistenceEnabled_.load() != 0;
+    return true;
+}
+
+bool BleTelemetryService::consumeDeviceNameSaveRequested(
+    DeviceNameConfig& settings,
+    uint16_t& requestId)
+{
+    if (!consumeCommand(PendingCommand::SaveDeviceName, requestId)) return false;
+    settings = pendingDeviceName_;
     return true;
 }
 

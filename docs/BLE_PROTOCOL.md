@@ -124,6 +124,7 @@ the app observes the resulting state on the next dashboard page.
 | `14` | none | Bench-test hook: force the relay closed (load connected) right now, bypassing the enabled flag and every threshold. Always `Applied`. |
 | `15` | none | Bench-test hook: force the relay open (load disconnected) right now, bypassing the enabled flag and every threshold. Always `Applied`. |
 | `16` | `u8` enabled flag | Save whether session Ah/Wh totals persist across reboots. Off by default — session counters have always reset on every power cycle, so persisting them is opt-in rather than a silent behavior change. Enabling starts persisting the totals already accumulating in RAM; it does not restore an old persisted value from before a previous disable. |
+| `17` | `u8` name length (0-32), name bytes | Save a custom device name, or clear it (empty) to revert to the default generated from the chip ID. Printable ASCII only, no `;` (the name is embedded in the semicolon-delimited Device Information string below). Device-side and authoritative: the Web Dashboard reads/writes the same stored value, so a rename from either transport is visible from the other. |
 
 Every app-originated command appends a `u16` request ID. A command is not
 considered successful until its matching Control Result notification reports
@@ -132,7 +133,11 @@ Commands `7` and `8` echo the resulting state on the next Wi-Fi station
 dashboard page (`0x17`) rather than in the Control Result itself; commands `9`,
 `10` and `11` do the same on the state-of-charge page (`0x18`); commands `12`,
 `13`, `14` and `15` do the same on the load-protection page (`0x19`); command
-`16` does the same on the directional-energy page (`0x12`).
+`16` does the same on the directional-energy page (`0x12`); command `17` does
+the same in Device Information's `NAME=` field, refreshed immediately (not
+waiting for the next telemetry-cadence rebuild) so a client that re-reads
+Device Information right after an `Applied` result — to confirm what it just
+set — does not race a stale cached value.
 
 Command `7`'s payload can reach 99 bytes, well past the 20-byte notification
 size but still comfortably under a negotiated MTU. Request a larger MTU
@@ -162,12 +167,19 @@ The readable device-information characteristic is:
 ```
 
 Its UTF-8 value is a semicolon-separated diagnostic string, currently
-`FW=<firmware-version>;HW=<hardware-revision>;ID=<stable-device-id>;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1,energyp1`.
+`FW=<firmware-version>;HW=<hardware-revision>;ID=<stable-device-id>;NAME=<device-name>;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1,energyp1,name1`.
 Clients must ignore unknown keys so information can be added without a protocol
 break. The app must enable the BLE Wi-Fi settings UI only when this list
 includes `wifi1`, the state-of-charge/time-to-go UI only when it includes
-`soc1`, the load-protection relay UI only when it includes `protection1`, and
-the session-energy-persistence toggle only when it includes `energyp1`.
+`soc1`, the load-protection relay UI only when it includes `protection1`, the
+session-energy-persistence toggle only when it includes `energyp1`, and
+device-name renaming (control command `17`) only when it includes `name1`.
+
+`NAME` is either a user-assigned name (set from the Web Dashboard or command
+`17`) or, if never customized, a default generated from the same last-4-hex-
+of-`ID` fragment described below -- e.g. `Battery Monitor 27AC`. It never
+contains `;`. Firmware predating `name1` doesn't include this key at all;
+clients should fall back to their own locally-assigned label in that case.
 
 `ID` is 12 uppercase hex characters derived from `ESP.getEfuseMac()`, the
 factory-programmed base MAC burned into the chip's eFuse. It is stable across
