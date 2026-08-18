@@ -216,10 +216,14 @@ void OledDisplay::showLivePage(
         bleConnected ? 'C' : '-',
         static_cast<unsigned>(wifiClients)
     );
-    // The "SoC:" prefix makes this segment's width vary with the percent's
-    // digit count, so measure it rather than assume a fixed column.
-    oled_.drawStr(2 + oled_.getStrWidth(left) + 4, 8, right);
-    oled_.drawStr(108, 8, "1/2");
+    // Center this segment in the gap between the SoC text and the page
+    // indicator rather than assuming a fixed column, since the SoC text's
+    // width varies with the percent's digit count.
+    constexpr int PAGE_LABEL_X = 108;
+    const int socEndX = 2 + oled_.getStrWidth(left);
+    const int gap = PAGE_LABEL_X - socEndX - oled_.getStrWidth(right);
+    oled_.drawStr(socEndX + (gap > 0 ? gap / 2 : 0), 8, right);
+    oled_.drawStr(PAGE_LABEL_X, 8, "1/2");
 
     oled_.setFont(u8g2_font_6x12_tf);
     formatCurrent(left, sizeof(left), telemetry.current, 2);
