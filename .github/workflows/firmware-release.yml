@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.x'
       - name: Install PlatformIO
-        run: pip install platformio
+        run: pip install platformio ecdsa
       - name: Verify release tag matches firmware version
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -26,6 +26,32 @@ jobs:
           test "$version" = "$embedded_version"
       - name: Build OTA and factory images
         run: pio run
+      - name: Sign firmware image
+        env:
+          FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
+        run: |
+          key_file="$(mktemp)"
+          printf '%s' "$FIRMWARE_SIGNING_KEY" > "$key_file"
+          python - "$key_file" .pio/build/xiao_esp32c3/firmware.bin firmware.sig <<'PY'
+          import hashlib
+          import sys
+
+          from ecdsa import SigningKey
+          from ecdsa.util import sigencode_string
+
+          key_path, image_path, sig_path = sys.argv[1:4]
+          with open(key_path, "rb") as key_fh:
+              signing_key = SigningKey.from_pem(key_fh.read())
+          with open(image_path, "rb") as image_fh:
+              digest = hashlib.sha256(image_fh.read()).digest()
+          # Raw r||s (64 bytes), not ASN.1 DER -- matches the fixed-length
+          # parsing FirmwareUpdateService::verifySignature() does on-device.
+          signature = signing_key.sign_digest(digest, sigencode=sigencode_string)
+          assert len(signature) == 64
+          with open(sig_path, "wb") as sig_fh:
+              sig_fh.write(signature)
+          PY
+          shred -u "$key_file"
       - name: Publish GitHub release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -33,6 +59,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           mkdir -p release
           cp .pio/build/xiao_esp32c3/firmware.bin "release/battery-monitor-${version}.bin"
+          cp firmware.sig "release/battery-monitor-${version}.sig"
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32c3 merge_bin \
             --flash_mode dio --flash_freq 80m --flash_size 4MB \
             -o "release/battery-monitor-${version}.factory.bin" \

@@ -182,7 +182,8 @@ address, to recognize "the same monitor" across reconnects.
 Firmware version 0.5.1 and later exposes a sequential, checksummed BLE update
 transport. It is intended for the companion app after it has downloaded a
 release asset while the phone still has internet access. The Web Dashboard's
-local `.bin` upload remains available as a recovery path.
+local `.bin` upload remains available as a recovery path, but is CRC/format
+checked only — it does not verify the signature below.
 
 The app must enable this path only when Device Information includes `ota1`.
 
@@ -199,9 +200,9 @@ the monitor rejects duplicate, missing or out-of-order data frames.
 
 | Command | Frame | Meaning |
 | ---: | --- | --- |
-| `0xA0` | command, `u32` image size, `u32` IEEE CRC-32 | Start a new image. The checksum covers the complete raw `.bin` asset. |
+| `0xA0` | command, `u32` image size, `u32` IEEE CRC-32, 64 bytes ECDSA-P256 signature | Start a new image. The checksum covers the complete raw `.bin` asset; the signature is over that image's SHA-256 digest, raw `r \|\| s` (32 bytes each, big-endian) — not DER — verified against the public key embedded in firmware (firmware 0.5.16+). Get the matching `.sig` asset from the same GitHub Release as the `.bin`. |
 | `0xA1` | command, `u32` offset, 1..N bytes image data | Write one image chunk at exactly the next expected offset. |
-| `0xA2` | command only | Finish. The monitor checks size, CRC-32 and ESP32 image verification before scheduling a reboot. |
+| `0xA2` | command only | Finish. The monitor checks size and CRC-32 immediately, then moves to a `verifying` status while the main loop performs signature and ESP32 image verification (firmware 0.5.16+ defers this off the BLE callback -- see status below), before scheduling a reboot. A bad signature discards the write via `Update.abort()` rather than `Update.end()`, so the previous firmware stays the boot target. |
 | `0xA3` | command only | Abort and discard the inactive-partition image. |
 
 The companion app requests an enlarged MTU when the platform allows it, limits
@@ -218,12 +219,23 @@ Read/Notify characteristic:
 ```
 
 It is always a 12-byte packet: protocol version at byte 0 (`1`), state at byte
-1 (`0` idle, `1` receiving, `2` verified, `3` error), received/expected byte
-counts as `u32` at offsets 2/6, error code at byte 10, reserved byte 11. Error
-codes are: `1` start, `2` sequence, `3` flash write, `4` CRC-32, `5` final
-image verification. A `verified` status is sent, then the monitor waits two
+1 (`0` idle, `1` receiving, `2` verified, `3` error, `4` verifying, firmware
+0.5.16+), received/expected byte counts as `u32` at offsets 2/6, error code at
+byte 10, reserved byte 11. Error codes are: `1` start, `2` sequence, `3` flash
+write, `4` CRC-32, `5` final image verification, `6` signature invalid
+(firmware 0.5.16+). A `verified` status is sent, then the monitor waits two
 seconds before rebooting so the central can receive it.
 
-CRC-32 detects transfer corruption; it is not a cryptographic signature. Only
-install release assets you trust. Signed/authenticated update policy remains a
-future hardening task.
+CRC-32 detects transfer corruption; it is not authentication on its own. As
+of firmware 0.5.16, the BLE path also requires a valid ECDSA-P256 signature
+(see the transfer characteristic above) verified against a public key
+embedded in firmware — an attacker reachable over BLE can no longer push an
+arbitrary image through this path, only one signed by the project's release
+key. The Web Dashboard upload path is unaffected by this and remains
+CRC/format-checked only; only install `.bin` files you trust there.
+
+Signature and final image verification run on the main loop, not inside the
+BLE write callback: mbedTLS's ECDSA math is too stack-heavy for the
+Bluetooth controller task and overflows it if run there directly. Expect a
+brief `verifying` status (typically well under a second) between the last
+data frame's `0xA2` finish and the terminal `verified`/`error` status.

@@ -86,7 +86,14 @@ JSON and BLE.
    sequential offsets, CRC-32 and ESP32 image validation. Keep the Web path as
    recovery while the app downloads release assets before joining the monitor.
 3. Add signed/authenticated OTA with a documented recovery path. CRC-32 is an
-   integrity check, not an authenticity guarantee.
+   integrity check, not an authenticity guarantee. Firmware-side done as of
+   0.5.16: BLE transfers require an ECDSA-P256 signature (raw `r||s`) over
+   the image's SHA-256 digest, checked against a public key embedded in
+   `include/ota/FirmwareSigningKey.h`; the release workflow signs each
+   published `.bin` with a private key held only as a GitHub Actions secret.
+   The Web Dashboard path is deliberately unchanged (still CRC/format-checked
+   only). Still open: the Flutter app needs to fetch the release's `.sig`
+   asset and include it in the BLE transfer's start frame.
 4. [x] Add a release checklist covering build, flash, I2C discovery, calibration, web/BLE compatibility and OTA rollback.
 5. [x] Let the Web Dashboard check GitHub for a newer firmware release and
    link directly to the right OTA asset, once accessible over the home

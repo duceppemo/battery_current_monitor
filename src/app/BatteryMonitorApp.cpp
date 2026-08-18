@@ -778,6 +778,7 @@ void BatteryMonitorApp::update()
     // HTTP/Wi-Fi recovery may occasionally take longer than a normal loop,
     // but it must not make the local interface appear frozen.
     updateButtons(now);
+    firmwareUpdate_.processPendingVerification();
     if (firmwareUpdate_.consumeRestartRequested()) {
         firmwareRestartAtMs_ = now + Config::BLE_OTA_RESTART_GRACE_MS;
         logRuntimeEvent("Firmware update verified; allowing BLE status delivery before restart.");

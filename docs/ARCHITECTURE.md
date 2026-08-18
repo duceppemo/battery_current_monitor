@@ -172,12 +172,24 @@ relay in the field, away from the home Wi-Fi station MQTT needs.
 ### `FirmwareUpdateService`
 
 Owns the ESP32 inactive-partition writer for the BLE transfer protocol. It only
-accepts strictly ordered chunks and verifies byte count, CRC-32 and the ESP32
-image before asking `BatteryMonitorApp` to restart. BLE owns the GATT callback;
-the application owns the actual reboot. The Web Dashboard keeps its HTTP upload
-adapter, but both routes claim the same update writer lock, so an active route
-causes the other to fail safely. A verified BLE status remains available for a
-short grace period before the application restarts.
+accepts strictly ordered chunks and verifies byte count, CRC-32, an
+ECDSA-P256 signature (over the image's SHA-256 digest, checked against the
+public key embedded in `include/ota/FirmwareSigningKey.h`) and the ESP32
+image before asking `BatteryMonitorApp` to restart. BLE owns the GATT
+callback; the application owns the actual reboot. The Web Dashboard keeps its
+HTTP upload adapter (CRC/format-checked only, no signature check), but both
+routes claim the same update writer lock, so an active route causes the other
+to fail safely. A verified BLE status remains available for a short grace
+period before the application restarts.
+
+Signature verification and `Update.end()` deliberately do not run inside
+`finish()`, i.e. not inside the BLE write callback: mbedTLS's ECDSA math is
+too stack-heavy for the Bluetooth controller task and crashes it if run
+there. `finish()` only validates size/CRC-32 and moves `state()` to
+`Verifying`; `BatteryMonitorApp::update()` polls
+`processPendingVerification()` every loop iteration, which does the actual
+signature check off the BLE task's stack before finalizing or discarding the
+write.
 
 ### `DebouncedButton`
 
@@ -194,7 +206,5 @@ The headers under `include/future/` are planning markers, not active interfaces 
 - `SettingsStore` owns validated, versioned NVS configuration.
 - `TelemetryHistory` consumes snapshots through a bounded buffer/decimation policy.
 - `Ds18b20Sensor` is an optional, independent temperature source.
-- Signed/authenticated OTA policy is a future hardening layer over the active
-  `FirmwareUpdateService` and Web upload paths.
 
 The ordering and acceptance criteria live in [ROADMAP.md](ROADMAP.md).
