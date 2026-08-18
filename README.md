@@ -221,13 +221,18 @@ characteristic for the Flutter app. Its fixed 20-byte format works without MTU
 negotiation; the complete contract is in
 [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md).
 
-Firmware advertises `telemetry1,dashboard1,ota1,control1,wifi1` in Device
-Information. Binary telemetry and rotating dashboard pages update once per
-second. Dashboard commands include a request ID and return an explicit
-applied, rejected or failed result, so a client never has to infer success from
-a write response alone. Home Wi-Fi credentials can be set from the BLE app or
-the Web Dashboard, whichever is reachable at the time; the recovery AP is
-unaffected either way.
+Firmware advertises
+`telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1` in Device
+Information. Binary telemetry updates once per second; the nine rotating
+dashboard pages update one per second each, so a newly connected client has
+a complete dashboard within roughly nine seconds. Dashboard commands include
+a request ID and return an explicit applied, rejected or failed result, so a
+client never has to infer success from a write response alone. Home Wi-Fi
+credentials can be set from the BLE app or the Web Dashboard, whichever is
+reachable at the time; the recovery AP is unaffected either way. Home Wi-Fi,
+the battery fuel gauge and the load-protection relay are all configurable
+from either the BLE app or the Web Dashboard; MQTT is Web Dashboard only,
+since it is meaningless without the home Wi-Fi station already connected.
 
 ## Measurement configuration and calibration
 

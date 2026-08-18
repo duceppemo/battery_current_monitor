@@ -9,7 +9,9 @@ BLE protocol, control or OTA change, update and cross-check both repositories.
   MTU negotiation. Firmware publishes binary telemetry and rotating dashboard
   pages on the one-second BLE cadence.
 - Keep all XIAO ESP32-C3 pins in `include/AppConfig.h`: I2C is GPIO6 SDA and
-  GPIO7 SCL; GPIO3 is session-reset/restart; GPIO4 is OLED page/power.
+  GPIO7 SCL; GPIO3 is session-reset/restart; GPIO4 is OLED page/power; GPIO5
+  drives the load-protection relay/SSR (through a transistor stage, not
+  directly — see the README's wiring section).
 - Access INA228 (`0x40`) through direct I2C register reads/writes and SSD1309
   (`0x3C`) through U8g2. Do not add I2C reads in presentation transports.
 - Keep the `min_spiffs.csv` 4 MB dual-OTA layout and preserve OTA headroom.
