@@ -59,7 +59,9 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 - BLE characteristics with human-readable descriptors and acknowledged controls
 - Combined BLE telemetry
 - Concurrent Wi-Fi recovery SoftAP, optional home-network station mode and live dashboard
-- `/api/telemetry` JSON endpoint
+- `/api/telemetry` JSON endpoint, plus a push WebSocket on port 81 broadcasting
+  the same JSON so the dashboard updates without polling (falls back to
+  polling if the socket never connects)
 - Separate Web and BLE reset controls for extrema and energy
 - Device Information reporting firmware version, hardware revision and BLE capabilities
 - Local Web Dashboard firmware `.bin` upload

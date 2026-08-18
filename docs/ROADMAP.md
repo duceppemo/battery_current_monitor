@@ -110,6 +110,19 @@ Web Dashboard and BLE app (SoC/time-to-go also on the OLED), survive a
 reboot, and a full-charge sync (auto or manual) reliably returns to 100%
 while updating cycle history.
 
+## Phase 7 — Dashboard responsiveness
+
+1. [x] Add a push-only WebSocket (port 81) broadcasting the same telemetry
+   JSON as `/api/telemetry`, so the dashboard updates without polling
+   overhead. Every REST endpoint (settings, calibration, OTA) stays on the
+   existing synchronous `WebServer`, untouched; the dashboard page falls back
+   to polling if the socket never connects, so nothing regresses for a
+   client that can't use WebSockets.
+
+**Done when:** the dashboard stays responsive with the socket connected, and
+degrades gracefully (no missing functionality, just slower updates) if it
+can't connect.
+
 ## Non-goals until earlier phases pass
 
 - Persisting energy counters before their accuracy and reset semantics are proven.

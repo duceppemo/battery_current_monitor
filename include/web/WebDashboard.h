@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <WebServer.h>
+#include <WebSocketsServer.h>
 
 #include "alarm/AlarmSettings.h"
 #include "energy/EnergyAccumulator.h"
@@ -69,6 +70,9 @@ private:
         ResetBatteryHistory
     };
 
+    bool buildTelemetryJson(String& json);
+    void broadcastTelemetryIfDue(uint32_t nowMs);
+
     void handleRoot();
     void handleTelemetry();
     void handleResetExtrema();
@@ -110,6 +114,11 @@ private:
     );
 
     WebServer server_{80};
+    // Push-only telemetry channel on a separate port; every existing REST
+    // endpoint above stays on the synchronous WebServer untouched. The page
+    // falls back to polling /api/telemetry if this never connects.
+    WebSocketsServer webSocket_{81};
+    uint32_t lastWebSocketBroadcastMs_ = 0;
     TelemetryStore* store_ = nullptr;
     const EnergyTotals* energyTotals_ = nullptr;
     const Ina228Sensor* sensor_ = nullptr;

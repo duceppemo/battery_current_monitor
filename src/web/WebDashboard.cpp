@@ -104,6 +104,18 @@ void WebDashboard::begin(
         [this]() { handleFirmwareUpload(); });
     server_.onNotFound([this]() { handleNotFound(); });
     server_.begin();
+
+    webSocket_.begin();
+    webSocket_.onEvent([this](uint8_t clientId, WStype_t type, uint8_t* payload, size_t length) {
+        (void)payload;
+        (void)length;
+        if (type != WStype_CONNECTED) return;
+        // Send an immediate snapshot so a newly connected client doesn't
+        // wait up to one broadcast interval for its first update.
+        String json;
+        if (buildTelemetryJson(json)) webSocket_.sendTXT(clientId, json);
+    });
+
     running_ = true;
 }
 
@@ -132,8 +144,10 @@ void WebDashboard::update()
 {
     if (running_) {
         server_.handleClient();
+        webSocket_.loop();
         maintainAccessPoint(millis());
         maintainStation(millis());
+        broadcastTelemetryIfDue(millis());
         if (restartAfterMs_ != 0 && static_cast<int32_t>(millis() - restartAfterMs_) >= 0) {
             ESP.restart();
         }
@@ -402,18 +416,16 @@ void WebDashboard::appendMetric(
     json += "}";
 }
 
-void WebDashboard::handleTelemetry()
+bool WebDashboard::buildTelemetryJson(String& json)
 {
     if (store_ == nullptr || energyTotals_ == nullptr || sensor_ == nullptr ||
         calibration_ == nullptr || alarms_ == nullptr || alarmMonitor_ == nullptr ||
         batteryProfile_ == nullptr || stateOfCharge_ == nullptr) {
-        server_.send(503, "application/json", "{\"error\":\"telemetry unavailable\"}");
-        return;
+        return false;
     }
 
     const Telemetry& t = store_->current();
 
-    String& json = telemetryJson_;
     json = "{\"firmwareVersion\":\"";
     json += Config::FIRMWARE_VERSION;
     json += "\",\"firmwareImageMarker\":\"";
@@ -551,8 +563,28 @@ void WebDashboard::handleTelemetry()
     appendUnsigned(json, millis() / 1000UL);
     json += "}";
 
+    return true;
+}
+
+void WebDashboard::handleTelemetry()
+{
+    if (!buildTelemetryJson(telemetryJson_)) {
+        server_.send(503, "application/json", "{\"error\":\"telemetry unavailable\"}");
+        return;
+    }
+
     server_.sendHeader("Cache-Control", "no-store");
-    server_.send(200, "application/json", json);
+    server_.send(200, "application/json", telemetryJson_);
+}
+
+void WebDashboard::broadcastTelemetryIfDue(uint32_t nowMs)
+{
+    if (webSocket_.connectedClients() == 0) return;
+    if (nowMs - lastWebSocketBroadcastMs_ < Config::MEASUREMENT_INTERVAL_MS) return;
+    lastWebSocketBroadcastMs_ = nowMs;
+
+    String json;
+    if (buildTelemetryJson(json)) webSocket_.broadcastTXT(json);
 }
 
 void WebDashboard::handleResetExtrema()
