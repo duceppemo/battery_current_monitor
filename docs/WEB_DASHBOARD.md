@@ -34,6 +34,13 @@ The dashboard also shows BLE, I2C, Wi-Fi-client and display status, plus a
 battery fuel gauge card (state of charge and time-to-empty) once a battery
 profile is saved and synced to full at least once.
 
+A "Show °F"/"Show °C" button in the header toggles the displayed temperature
+unit (live value, min/max, and the alarm temperature threshold field). This
+is purely a browser-local display preference, persisted in `localStorage`;
+the monitor, `/api/telemetry` and the alarm-save API always use Celsius —
+the dashboard converts the alarm threshold to Celsius before saving and back
+to the display unit when showing the stored value.
+
 It provides grouped controls beside the affected data: separate extrema and
 session-energy resets, OLED power, guided calibration, persistent alarm
 limits, battery profile setup, manual full-charge sync and history reset, home Wi-Fi setup
