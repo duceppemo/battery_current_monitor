@@ -167,6 +167,8 @@ void BatteryMonitorApp::begin()
     batteryProfile_.begin();
     stateOfCharge_.begin();
     mqttSettings_.begin();
+    loadProtectionSettings_.begin();
+    loadProtectionMonitor_.begin();
     sensor_.setCalibration(calibration_.current());
     const CurrentCalibration& activeCalibration = calibration_.current();
     Serial.printf(
@@ -196,7 +198,8 @@ void BatteryMonitorApp::begin()
     bootCheckpoint = 7;
     web_.begin(
         telemetry_, energy_.totals(), sensor_, calibration_, alarms_, alarmMonitor_,
-        firmwareUpdate_, batteryProfile_, stateOfCharge_, mqttSettings_, mqttPublisher_
+        firmwareUpdate_, batteryProfile_, stateOfCharge_, mqttSettings_, mqttPublisher_,
+        loadProtectionSettings_, loadProtectionMonitor_
     );
     bootCheckpoint = 8;
     web_.setCalibrationStatus(
@@ -442,6 +445,43 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         }
     }
 
+    LoadProtectionConfig requestedProtection;
+    if (web_.consumeLoadProtectionSaveRequested(requestedProtection)) {
+        if (loadProtectionSettings_.save(requestedProtection)) {
+            logRuntimeEvent("Load protection settings saved from web UI.");
+        } else {
+            logRuntimeEvent("Load protection settings save from web UI failed.");
+        }
+    }
+
+    if (web_.consumeLoadProtectionReconnectRequested()) {
+        const auto result = loadProtectionMonitor_.reconnect(
+            loadProtectionSettings_.current(), telemetry_.current(),
+            stateOfCharge_, batteryProfile_.current()
+        );
+        switch (result) {
+        case LoadProtectionMonitor::ReconnectResult::Reconnected:
+            logRuntimeEvent("Load reconnected from web UI.");
+            break;
+        case LoadProtectionMonitor::ReconnectResult::ConditionStillActive:
+            logRuntimeEvent("Load reconnect from web UI rejected: condition still active.");
+            break;
+        case LoadProtectionMonitor::ReconnectResult::NotTripped:
+            logRuntimeEvent("Load reconnect from web UI ignored: not tripped.");
+            break;
+        }
+    }
+
+    if (web_.consumeLoadProtectionTestDisconnectRequested()) {
+        loadProtectionMonitor_.testDisconnect();
+        logRuntimeEvent("Load relay test: forced disconnect from web UI.");
+    }
+
+    if (web_.consumeLoadProtectionTestConnectRequested()) {
+        loadProtectionMonitor_.testConnect();
+        logRuntimeEvent("Load relay test: forced connect from web UI.");
+    }
+
     if (ble_.consumeCalibrationSaveRequested(requestedCalibration, bleRequestId)) {
         if (calibration_.save(requestedCalibration)) {
             sensor_.setCalibration(calibration_.current());
@@ -548,6 +588,9 @@ void BatteryMonitorApp::updateMeasurement(uint32_t nowMs)
     alarmMonitor_.update(sample, alarms_.current());
     energy_.update(sample);
     stateOfCharge_.update(sample, batteryProfile_.current(), completedAtMs);
+    loadProtectionMonitor_.update(
+        loadProtectionSettings_.current(), sample, stateOfCharge_, batteryProfile_.current()
+    );
 }
 
 void BatteryMonitorApp::updateDisplay(uint32_t nowMs)

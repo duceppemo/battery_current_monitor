@@ -6,7 +6,7 @@ namespace Config
 {
     // Keep the release version in one place. The preprocessor string literal is
     // also embedded in OTA images for the dashboard's selected-file check.
-#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.8"
+#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.9"
     constexpr char FIRMWARE_VERSION[] = BATTERY_MONITOR_FIRMWARE_VERSION;
     // Deliberately retained in the application image so the Web Dashboard can
     // identify a selected OTA .bin before it is written to the inactive slot.
@@ -66,4 +66,11 @@ namespace Config
     // live dashboard, so a slower interval keeps broker/network load low.
     constexpr uint32_t MQTT_RECONNECT_INTERVAL_MS = 15000;
     constexpr uint32_t MQTT_PUBLISH_INTERVAL_MS = 10000;
+
+    // Load-protection relay control output, e.g. an InkBird SSR-25 DA. The
+    // SSR's DC control input wants 3-32 V; a bare 3.3 V GPIO is at the low
+    // end of that range, so drive it through an NPN/MOSFET stage rather than
+    // straight off the pin. HIGH = load connected, LOW = load disconnected.
+    // XIAO D3 = GPIO5, not a strapping pin (unlike GPIO2/8/9).
+    constexpr uint8_t LOAD_PROTECTION_RELAY_PIN = 5;
 }

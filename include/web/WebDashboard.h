@@ -11,6 +11,7 @@
 #include "mqtt/MqttPublisher.h"
 #include "network/WifiSettings.h"
 #include "ota/FirmwareUpdateService.h"
+#include "protection/LoadProtection.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
 
@@ -28,7 +29,9 @@ public:
         const BatteryProfile& batteryProfile,
         const StateOfChargeEstimator& stateOfCharge,
         const MqttSettings& mqttSettings,
-        MqttPublisher& mqttPublisher
+        MqttPublisher& mqttPublisher,
+        const LoadProtectionSettings& loadProtectionSettings,
+        LoadProtectionMonitor& loadProtectionMonitor
     );
     void update();
     bool consumeDisplayToggleRequested();
@@ -43,6 +46,10 @@ public:
     bool consumeBatterySyncRequested();
     bool consumeBatteryHistoryResetRequested();
     bool consumeMqttSettingsSaveRequested(MqttBrokerSettings& settings);
+    bool consumeLoadProtectionSaveRequested(LoadProtectionConfig& settings);
+    bool consumeLoadProtectionReconnectRequested();
+    bool consumeLoadProtectionTestDisconnectRequested();
+    bool consumeLoadProtectionTestConnectRequested();
 
     void setRuntimeStatus(
         bool bleConnected,
@@ -72,7 +79,11 @@ private:
         SaveBatteryProfile,
         SyncBatteryFull,
         ResetBatteryHistory,
-        SaveMqttSettings
+        SaveMqttSettings,
+        SaveLoadProtection,
+        ReconnectLoad,
+        TestDisconnectLoad,
+        TestConnectLoad
     };
 
     bool buildTelemetryJson(String& json);
@@ -92,6 +103,10 @@ private:
     void handleBatterySync();
     void handleBatteryHistoryReset();
     void handleMqttSave();
+    void handleLoadProtectionSave();
+    void handleLoadProtectionReconnect();
+    void handleLoadProtectionTestDisconnect();
+    void handleLoadProtectionTestConnect();
     void handleFirmwareUpload();
     void handleNotFound();
     bool startAccessPoint();
@@ -136,6 +151,8 @@ private:
     const StateOfChargeEstimator* stateOfCharge_ = nullptr;
     const MqttSettings* mqttSettings_ = nullptr;
     MqttPublisher* mqttPublisher_ = nullptr;
+    const LoadProtectionSettings* loadProtectionSettings_ = nullptr;
+    LoadProtectionMonitor* loadProtectionMonitor_ = nullptr;
     String telemetryJson_;
 
     bool running_ = false;
@@ -155,6 +172,7 @@ private:
     DeviceAlarmSettings pendingAlarms_;
     BatteryProfileSettings pendingBatteryProfile_;
     MqttBrokerSettings pendingMqttSettings_;
+    LoadProtectionConfig pendingLoadProtection_;
     char calibrationStatus_[48] = "unchanged";
     uint32_t successfulSamples_ = 0;
     uint32_t failedSamples_ = 0;

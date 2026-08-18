@@ -22,6 +22,10 @@
                                                                                     ▼
                                                                              MqttPublisher
                                                                           Home Assistant MQTT
+                                                                                    │
+                                                                                    ▼
+                                                                          LoadProtectionMonitor
+                                                                             relay/SSR GPIO
 
  buttons ───────────────────────────────────────────> App (display toggle / extrema reset)
 ```
@@ -116,6 +120,30 @@ needs frequent calls to service keepalive pings. Unlike every other settings
 type in this project, MQTT save requests are accepted only from
 `WebDashboard`; there is intentionally no BLE control for it, since it is
 meaningless without the home Wi-Fi station already connected.
+
+### `LoadProtectionSettings` and `LoadProtectionMonitor`
+
+`LoadProtectionSettings` owns one validated NVS profile (enabled flag, low
+voltage threshold, low SoC threshold), analogous to the other `*Settings`
+types. It defaults to `enabled = false`, and `LoadProtectionMonitor` treats a
+disabled profile as a complete no-op — the relay GPIO stays permanently
+"connected" — so an unreviewed default threshold can never disconnect a load
+nobody asked to protect; enabling it and setting both thresholds happen in
+the same Web Dashboard save. When enabled, `LoadProtectionMonitor::update()`
+(called once per fresh `Telemetry` sample, immediately after
+`StateOfChargeEstimator::update()`, from which it reads SoC) opens the relay
+the moment voltage or SoC crosses its threshold and **latches** — unlike
+`AlarmMonitor`, which just reports a live flag every sample, this holds the
+disconnected state even if the reading recovers on its own, so a value
+hovering at the threshold under load cannot chatter the relay. Only
+`reconnect()` clears the latch, and only if the triggering condition is no
+longer active (`evaluateBreach()` — a static, side-effect-free check reused
+by both the live "would a reconnect succeed" status in the dashboard JSON and
+the reconnect gate itself). `testConnect()`/`testDisconnect()` are a separate
+bench-test path: they bypass the enabled flag and every threshold entirely,
+since verifying the GPIO actually switches the physical relay has to work
+before the automatic logic above can be trusted at all. Like MQTT, there is
+no BLE control surface for this feature — Web Dashboard only.
 
 ### `FirmwareUpdateService`
 

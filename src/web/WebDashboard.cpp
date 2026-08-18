@@ -72,6 +72,16 @@ namespace
         snprintf(settings.password, sizeof(settings.password), "%s", password.c_str());
         return MqttSettings::isValid(settings);
     }
+
+    bool parseLoadProtectionSettings(WebServer& server, LoadProtectionConfig& settings)
+    {
+        if (!parseFiniteFloat(server, "lowVoltage", settings.lowVoltageThreshold) ||
+            !parseFiniteFloat(server, "lowSocPercent", settings.lowSocPercentThreshold)) {
+            return false;
+        }
+        settings.enabled = server.hasArg("enabled") && server.arg("enabled") == "1";
+        return LoadProtectionSettings::isValid(settings);
+    }
 }
 
 void WebDashboard::begin(
@@ -85,7 +95,9 @@ void WebDashboard::begin(
     const BatteryProfile& batteryProfile,
     const StateOfChargeEstimator& stateOfCharge,
     const MqttSettings& mqttSettings,
-    MqttPublisher& mqttPublisher)
+    MqttPublisher& mqttPublisher,
+    const LoadProtectionSettings& loadProtectionSettings,
+    LoadProtectionMonitor& loadProtectionMonitor)
 {
     store_ = &store;
     energyTotals_ = &energyTotals;
@@ -98,6 +110,8 @@ void WebDashboard::begin(
     stateOfCharge_ = &stateOfCharge;
     mqttSettings_ = &mqttSettings;
     mqttPublisher_ = &mqttPublisher;
+    loadProtectionSettings_ = &loadProtectionSettings;
+    loadProtectionMonitor_ = &loadProtectionMonitor;
     telemetryJson_.reserve(1400);
 
     WiFi.persistent(false);
@@ -119,6 +133,10 @@ void WebDashboard::begin(
     server_.on("/api/battery/sync", HTTP_POST, [this]() { handleBatterySync(); });
     server_.on("/api/battery/reset-history", HTTP_POST, [this]() { handleBatteryHistoryReset(); });
     server_.on("/api/mqtt/save", HTTP_POST, [this]() { handleMqttSave(); });
+    server_.on("/api/protection/save", HTTP_POST, [this]() { handleLoadProtectionSave(); });
+    server_.on("/api/protection/reconnect", HTTP_POST, [this]() { handleLoadProtectionReconnect(); });
+    server_.on("/api/protection/test-disconnect", HTTP_POST, [this]() { handleLoadProtectionTestDisconnect(); });
+    server_.on("/api/protection/test-connect", HTTP_POST, [this]() { handleLoadProtectionTestConnect(); });
     server_.on("/api/firmware", HTTP_POST,
         [this]() {
             if (firmwareUpdateSucceeded_) {
@@ -259,6 +277,28 @@ bool WebDashboard::consumeMqttSettingsSaveRequested(MqttBrokerSettings& settings
     if (!consumeCommand(PendingCommand::SaveMqttSettings)) return false;
     settings = pendingMqttSettings_;
     return true;
+}
+
+bool WebDashboard::consumeLoadProtectionSaveRequested(LoadProtectionConfig& settings)
+{
+    if (!consumeCommand(PendingCommand::SaveLoadProtection)) return false;
+    settings = pendingLoadProtection_;
+    return true;
+}
+
+bool WebDashboard::consumeLoadProtectionReconnectRequested()
+{
+    return consumeCommand(PendingCommand::ReconnectLoad);
+}
+
+bool WebDashboard::consumeLoadProtectionTestDisconnectRequested()
+{
+    return consumeCommand(PendingCommand::TestDisconnectLoad);
+}
+
+bool WebDashboard::consumeLoadProtectionTestConnectRequested()
+{
+    return consumeCommand(PendingCommand::TestConnectLoad);
 }
 
 void WebDashboard::setCalibrationStatus(const char* status)
@@ -458,7 +498,8 @@ bool WebDashboard::buildTelemetryJson(String& json)
     if (store_ == nullptr || energyTotals_ == nullptr || sensor_ == nullptr ||
         calibration_ == nullptr || alarms_ == nullptr || alarmMonitor_ == nullptr ||
         batteryProfile_ == nullptr || stateOfCharge_ == nullptr ||
-        mqttSettings_ == nullptr || mqttPublisher_ == nullptr) {
+        mqttSettings_ == nullptr || mqttPublisher_ == nullptr ||
+        loadProtectionSettings_ == nullptr || loadProtectionMonitor_ == nullptr) {
         return false;
     }
 
@@ -529,6 +570,23 @@ bool WebDashboard::buildTelemetryJson(String& json)
     appendUnsigned(json, mqtt.port);
     json += ",\"username\":";
     appendJsonString(json, mqtt.username);
+    json += "}";
+
+    const LoadProtectionConfig& protection = loadProtectionSettings_->current();
+    json += ",\"protection\":{\"enabled\":";
+    json += protection.enabled ? "true" : "false";
+    json += ",\"lowVoltageThreshold\":";
+    appendNullableFloat(json, true, protection.lowVoltageThreshold, 3);
+    json += ",\"lowSocPercentThreshold\":";
+    appendNullableFloat(json, true, protection.lowSocPercentThreshold, 1);
+    json += ",\"relayEngaged\":";
+    json += loadProtectionMonitor_->relayEngaged() ? "true" : "false";
+    json += ",\"tripped\":";
+    json += loadProtectionMonitor_->tripped() ? "true" : "false";
+    json += ",\"tripFlags\":";
+    appendUnsigned(json, loadProtectionMonitor_->tripFlags());
+    json += ",\"breachFlags\":";
+    appendUnsigned(json, LoadProtectionMonitor::evaluateBreach(protection, t, *stateOfCharge_, batteryProfile));
     json += "}";
 
     const Ina228ConfigurationStatus& configuration = sensor_->configuration();
@@ -764,6 +822,44 @@ void WebDashboard::handleMqttSave()
         return;
     }
     pendingMqttSettings_ = requested;
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleLoadProtectionSave()
+{
+    LoadProtectionConfig requested;
+    if (!parseLoadProtectionSettings(server_, requested) || !queueCommand(PendingCommand::SaveLoadProtection)) {
+        server_.send(400, "application/json", "{\"error\":\"invalid protection settings\"}");
+        return;
+    }
+    pendingLoadProtection_ = requested;
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleLoadProtectionReconnect()
+{
+    if (!queueCommand(PendingCommand::ReconnectLoad)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleLoadProtectionTestDisconnect()
+{
+    if (!queueCommand(PendingCommand::TestDisconnectLoad)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleLoadProtectionTestConnect()
+{
+    if (!queueCommand(PendingCommand::TestConnectLoad)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
     server_.send(202, "application/json", "{\"ok\":true}");
 }
 

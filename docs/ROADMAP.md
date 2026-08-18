@@ -148,6 +148,34 @@ can't connect.
 **Done when:** Home Assistant shows all published entities under one device
 with live values and correct availability, without any BLE app involvement.
 
+## Phase 9 — Load-protection relay
+
+1. [x] Add `LoadProtectionSettings` (enabled flag, low-voltage threshold,
+   low-SoC threshold) and `LoadProtectionMonitor`, which drives a relay/SSR
+   GPIO (`Config::LOAD_PROTECTION_RELAY_PIN`). Off by default and a complete
+   no-op until explicitly enabled from the Web Dashboard, so an unreviewed
+   default threshold can never disconnect a load nobody asked to protect.
+2. [x] Trip (open the relay) the moment voltage or SoC crosses its threshold,
+   whichever comes first, and latch — never auto-reconnect, even once the
+   reading recovers, so a value hovering at the threshold under load can't
+   chatter the relay. A dashboard "Reconnect load" button clears the latch,
+   but is refused while the triggering condition is still active.
+3. [x] Add "Test: force connect" / "Test: force disconnect" dashboard
+   buttons that bypass the enabled flag and every threshold, for bench-
+   testing the relay/SSR wiring itself before trusting the automatic logic.
+4. [ ] Validate against real hardware: an InkBird SSR-25 DA switching an
+   actual load, driven through a transistor/MOSFET stage (a bare 3.3 V GPIO
+   is at the low end of the SSR's 3-32 V DC control range). Verified so far
+   only via the Web Dashboard's `/api/protection/*` endpoints against the
+   live device's own ~3.35 V USB rail (no real battery/load attached): the
+   automatic trip, the condition-gated reconnect refusal and success, and
+   both test-force endpoints all behaved correctly.
+
+**Done when:** the relay reliably switches a real load through the SSR, the
+threshold trip and latched-reconnect behavior are confirmed against a real
+discharging battery (not just the bench USB rail), and the test buttons are
+confirmed against the physical wiring.
+
 ## Non-goals until earlier phases pass
 
 - Persisting energy counters before their accuracy and reset semantics are proven.

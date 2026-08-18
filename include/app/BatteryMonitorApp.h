@@ -12,6 +12,7 @@
 #include "measurement/CalibrationSettings.h"
 #include "mqtt/MqttPublisher.h"
 #include "ota/FirmwareUpdateService.h"
+#include "protection/LoadProtection.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
 #include "web/WebDashboard.h"
@@ -49,6 +50,8 @@ private:
     WebDashboard web_;
     MqttSettings mqttSettings_;
     MqttPublisher mqttPublisher_;
+    LoadProtectionSettings loadProtectionSettings_;
+    LoadProtectionMonitor loadProtectionMonitor_;
 
     DebouncedButton resetExtremaButton_;
     DebouncedButton displayToggleButton_;

@@ -31,6 +31,7 @@ TelemetryStore  <---- physical session reset button (min/max + Ah/Wh)
   +--> BleTelemetryService
   +--> WebDashboard / JSON API
   +--> MqttPublisher (Home Assistant discovery, configured via WebDashboard)
+  +--> LoadProtectionMonitor (relay/SSR, configured via WebDashboard)
   +--> Serial diagnostics
 ```
 
@@ -65,6 +66,9 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
   polling if the socket never connects)
 - MQTT publishing with Home Assistant MQTT Discovery, configurable from the
   Web Dashboard only (requires the home Wi-Fi station; not exposed over BLE)
+- Optional low-voltage/low-SoC load-protection relay output, disabled by
+  default until explicitly configured from the Web Dashboard; manual
+  reconnect and bench-test connect/disconnect controls
 - Separate Web and BLE reset controls for extrema and energy
 - Device Information reporting firmware version, hardware revision and BLE capabilities
 - Local Web Dashboard firmware `.bin` upload
@@ -107,6 +111,19 @@ Briefly press the display button to switch between the live/session and
 min/max pages. Hold it for one second to call the SSD1309/U8g2 power-save
 function instead.
 Measurement, BLE and Wi-Fi continue operating while the OLED is off.
+
+### Load-protection relay (optional)
+
+```text
+GPIO5 / D3 ---- driver stage ---- SSR control input   e.g. InkBird SSR-25 DA
+```
+
+`GPIO5` (XIAO `D3`) drives the load-protection relay/SSR, HIGH for load
+connected and LOW for disconnected. A bare 3.3 V GPIO is at the low end of a
+typical SSR's 3-32 V DC control range, so drive it through an NPN/MOSFET
+stage rather than wiring the GPIO straight to the SSR's control input. This
+output only does anything once load protection is explicitly enabled from the
+Web Dashboard; see [Load protection](#load-protection-optional) below.
 
 Pins are centralized in `include/AppConfig.h` and can be changed there.
 
@@ -170,6 +187,23 @@ publishes as JSON every 10 seconds, and availability
 Testament so Home Assistant marks the device offline promptly if it loses
 power or Wi-Fi. Reconnection is retried every 15 seconds while enabled and
 not connected; the stored password is never echoed back to the dashboard.
+
+### Load protection (optional)
+
+The Web Dashboard has a load-protection card (low-voltage cutoff, low-SoC
+cutoff, enable toggle) that drives the relay described in
+[Load-protection relay](#load-protection-relay-optional) above. It is
+**disabled by default and does nothing until explicitly enabled**, so an
+unreviewed default threshold can never disconnect a load the operator never
+asked to protect. Once enabled, the relay opens (load disconnected) the
+moment voltage or state of charge drops below its configured threshold,
+whichever happens first — SoC is only checked once the fuel gauge has been
+synced to full at least once. The trip **latches**: it never reconnects on
+its own, even if the reading recovers, so it cannot chatter if a value hovers
+right at the threshold under load. A "Reconnect load" button clears it, but
+is refused if the trigger condition is still active. Separate "Test: force
+connect" / "Test: force disconnect" buttons bypass all of this to bench-test
+the relay wiring directly, whether or not protection is enabled.
 
 ## BLE
 
