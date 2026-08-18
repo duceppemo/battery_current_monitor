@@ -82,6 +82,12 @@ JSON and BLE.
 3. Add signed/authenticated OTA with a documented recovery path. CRC-32 is an
    integrity check, not an authenticity guarantee.
 4. [x] Add a release checklist covering build, flash, I2C discovery, calibration, web/BLE compatibility and OTA rollback.
+5. [x] Let the Web Dashboard check GitHub for a newer firmware release and
+   link directly to the right OTA asset, once accessible over the home
+   network (station mode) with real internet access. GitHub's release-asset
+   CDN doesn't send CORS headers, so the browser can check versions and link
+   to the asset, but can't fetch-and-reupload it automatically; installing
+   the downloaded file is still the existing manual upload step.
 
 ## Phase 6 — Fuel gauge
 

@@ -143,7 +143,12 @@ It provides grouped controls beside the affected data: separate extrema and
 session-energy resets, OLED power, guided calibration, persistent alarm
 limits, battery profile setup, manual full-charge sync and history reset, home Wi-Fi setup
 and Web OTA. The update card shows both the installed firmware version and
-the version detected in a selected OTA image before upload.
+the version detected in a selected OTA image before upload, and can check
+GitHub for a newer release (needs the *browser's* device to have internet
+access, independent of the monitor's own connectivity) with a direct
+download link to the right `.bin` asset. Browsers don't allow a page to
+install a downloaded file automatically, so installing it is still the same
+manual "select file, then upload" step as before.
 
 ## BLE
 

@@ -45,7 +45,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"HTML(
 <div class="status" id="display-status"><span class="dot"></span>Display</div>
 </div>
 <div class="actions"><button id="display-toggle" onclick="toggleDisplay()">Turn display off</button></div>
-<div class="card firmware-card"><div class="metric-name">Firmware update</div><div class="calibration-help">Choose a release .bin from this phone or computer. The selected image is checked for its embedded version before upload. Keep this page open until the monitor confirms the update and reboots. Do not remove power during the upload.</div><div class="actions calibration-actions"><input id="firmware-file" type="file" accept=".bin,application/octet-stream" onchange="inspectFirmwareFile()"><button onclick="uploadFirmware()">Upload firmware</button></div><div class="calibration-message" id="firmware-current">Current firmware: --</div><div class="calibration-message" id="firmware-selected">Selected firmware: no file selected</div><div class="calibration-message" id="firmware-message"></div></div>
+<div class="card firmware-card"><div class="metric-name">Firmware update</div><div class="calibration-help">Checking for updates needs this device (not the monitor) to have internet access &mdash; it won't work while connected only to the BatteryMonitor recovery AP. Choose a release .bin from this phone or computer to install. The selected image is checked for its embedded version before upload. Keep this page open until the monitor confirms the update and reboots. Do not remove power during the upload.</div><div class="actions calibration-actions"><button onclick="checkFirmwareUpdate()">Check for updates</button></div><div class="calibration-message" id="firmware-update-message"></div><div class="actions calibration-actions" id="firmware-download-wrap"></div><div class="actions calibration-actions"><input id="firmware-file" type="file" accept=".bin,application/octet-stream" onchange="inspectFirmwareFile()"><button onclick="uploadFirmware()">Upload firmware</button></div><div class="calibration-message" id="firmware-current">Current firmware: --</div><div class="calibration-message" id="firmware-selected">Selected firmware: no file selected</div><div class="calibration-message" id="firmware-message"></div></div>
 <footer><span id="uptime">Uptime --</span> · <span id="clients">0 Wi-Fi clients</span> · <span id="reset-reason">Last reset: --</span></footer>
 </div>
 <script>
@@ -86,6 +86,34 @@ async function clearWifi(){if(!confirm('Forget the stored home Wi-Fi credentials
 function firmwareVersionInImage(bytes){const marker=[66,77,70,87,58];for(let i=0;i<=bytes.length-marker.length;i++){let found=true;for(let j=0;j<marker.length;j++)if(bytes[i+j]!==marker[j]){found=false;break}if(!found)continue;let version='';for(let j=i+marker.length;j<bytes.length&&j<i+marker.length+32;j++){const c=bytes[j];if(c===0)break;if((c>=48&&c<=57)||c===46||c===45||c===43||c===95||c>=65&&c<=90||c>=97&&c<=122)version+=String.fromCharCode(c);else break}if(version)return version}return null}
 async function inspectFirmwareFile(){const file=document.getElementById('firmware-file').files[0],selected=document.getElementById('firmware-selected'),message=document.getElementById('firmware-message');message.textContent='';if(!file){selected.textContent='Selected firmware: no file selected';return}if(!file.name.toLowerCase().endsWith('.bin')){selected.textContent='Selected firmware: not a .bin file';return}selected.textContent='Selected firmware: checking '+file.name+'...';try{const version=firmwareVersionInImage(new Uint8Array(await file.arrayBuffer()));selected.textContent=version?'Selected firmware: v'+version+' ('+file.name+')':'Selected firmware: version marker not found ('+file.name+')'}catch(e){selected.textContent='Selected firmware: unable to inspect '+file.name}}
 async function uploadFirmware(){const file=document.getElementById('firmware-file').files[0],message=document.getElementById('firmware-message');if(!file||!file.name.endsWith('.bin')){message.textContent='Select a firmware .bin file first.';return}if(!confirm('Upload '+file.name+'? Do not remove power while the monitor restarts.'))return;const form=new FormData();form.append('firmware',file);message.textContent='Uploading firmware...';try{const response=await fetch('/api/firmware',{method:'POST',body:form});const data=await response.json();message.textContent=response.ok?'Firmware accepted. The monitor is restarting...':(data.error||'Firmware update failed.')}catch(e){message.textContent='Upload connection lost. Wait for the monitor to reboot, then check its version.'}}
+function compareVersions(a,b){const pa=a.split('.').map(Number),pb=b.split('.').map(Number);for(let i=0;i<Math.max(pa.length,pb.length);i++){const x=pa[i]||0,y=pb[i]||0;if(x!==y)return x-y}return 0}
+async function checkFirmwareUpdate(){
+  const message=document.getElementById('firmware-update-message');
+  const linkWrap=document.getElementById('firmware-download-wrap');
+  linkWrap.innerHTML='';
+  const installed=latestTelemetry&&latestTelemetry.firmwareVersion;
+  if(!installed){message.textContent='Waiting for the monitor firmware version before checking.';return}
+  message.textContent='Checking github.com for a newer release...';
+  try{
+    const r=await fetch('https://api.github.com/repos/duceppemo/battery_current_monitor/releases/latest',{headers:{'Accept':'application/vnd.github+json'}});
+    if(!r.ok)throw new Error('GitHub returned HTTP '+r.status);
+    const release=await r.json();
+    const latest=(release.tag_name||'').replace(/^v/,'');
+    if(!latest){message.textContent='No published release found.';return}
+    const cmp=compareVersions(latest,installed);
+    if(cmp<=0){message.textContent=cmp<0?('Installed firmware v'+installed+' is newer than the latest published v'+latest+'.'):('Firmware v'+installed+' is up to date.');return}
+    const asset=(release.assets||[]).find(a=>a.name&&a.name.toLowerCase().endsWith('.bin')&&!a.name.toLowerCase().includes('factory'));
+    if(!asset){message.textContent='Update v'+latest+' is published but has no installable OTA .bin asset yet.';return}
+    message.textContent='Update available: v'+installed+' → v'+latest+'.';
+    const link=document.createElement('a');
+    link.href=asset.browser_download_url;
+    link.download=asset.name;
+    link.textContent='Download '+asset.name;
+    linkWrap.appendChild(link);
+  }catch(e){
+    message.textContent='Unable to check for updates (this device needs its own internet access, separate from the monitor): '+e.message;
+  }
+}
 function status(id,ok,text){const e=document.getElementById(id);e.classList.remove('good','bad');e.classList.add(ok?'good':'bad');e.innerHTML='<span class="dot"></span>'+text}
 function uptime(s){s=Math.floor(s);const d=Math.floor(s/86400);s%=86400;const h=Math.floor(s/3600);s%=3600;const m=Math.floor(s/60);return d?d+'d '+h+'h':h?h+'h '+m+'m':m+'m'}
 function applyTelemetry(d){latestTelemetry=d;document.getElementById('firmware-version').textContent='Firmware v'+(d.firmwareVersion||'--');document.getElementById('firmware-current').textContent='Current firmware: v'+(d.firmwareVersion||'--');updateCalibrationSamples(d);const fresh=num(d.sampleAgeMs)&&d.sampleAgeMs<=CALIBRATION_MAX_SAMPLE_AGE_MS;const healthy=d.sensorOK&&fresh;metric('voltage',d.voltage,fmtV);metric('current',d.current,fmtI);metric('power',d.power,fmtP);metric('temperature',d.temperature,fmtT);metric('shuntVoltage',d.shuntVoltage,fmtS);energy(d.energy);battery(d.battery);measurement(d.measurement);alarms(d.alarms);wifi(d.wifi);status('sensor-status',healthy,healthy?'INA228 OK':fresh?'INA228 error':'Telemetry stale');status('ble-status',d.bleConnected||d.bleAdvertising,d.bleConnected?'BLE connected':d.bleAdvertising?'BLE advertising':'BLE unavailable');status('wifi-status',d.accessPointReady||(d.wifi&&d.wifi.stationConnected),'Wi-Fi '+(d.wifi&&d.wifi.stationConnected?'station connected':d.accessPointReady?'AP fallback ready':'unavailable'));status('i2c-status',d.sensorOK,'Current sample: '+(d.sensorOK?'complete':'incomplete')+'; total incomplete: '+d.failedSamples);status('display-status',d.displayOn,d.displayOn?'Display on':'Display off');document.getElementById('display-toggle').textContent=d.displayOn?'Turn display off':'Turn display on';document.getElementById('uptime').textContent='Uptime '+uptime(d.uptimeSeconds);document.getElementById('clients').textContent=d.wifiClients+(d.wifiClients===1?' Wi-Fi client':' Wi-Fi clients');document.getElementById('reset-reason').textContent='Last reset: '+d.resetReason}
