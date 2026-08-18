@@ -6,7 +6,7 @@ namespace Config
 {
     // Keep the release version in one place. The preprocessor string literal is
     // also embedded in OTA images for the dashboard's selected-file check.
-#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.14"
+#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.15"
     constexpr char FIRMWARE_VERSION[] = BATTERY_MONITOR_FIRMWARE_VERSION;
     // Deliberately retained in the application image so the Web Dashboard can
     // identify a selected OTA .bin before it is written to the inactive slot.
@@ -59,6 +59,11 @@ namespace Config
     constexpr float SOC_TAIL_CURRENT_CAPACITY_FRACTION = 1.0f / 50.0f; // C/50.
     constexpr float SOC_CURRENT_SMOOTHING_ALPHA = 0.1f;
     constexpr uint32_t SOC_PERSIST_INTERVAL_MS = 60000;
+
+    // Session Ah/Wh persistence is opt-in (see EnergyPersistenceConfig); the
+    // same "periodic, not every sample" bound-flash-writes reasoning as the
+    // fuel gauge above applies here too.
+    constexpr uint32_t ENERGY_PERSIST_INTERVAL_MS = 60000;
 
     // MQTT is entirely optional; these only matter once a broker is
     // configured. Reconnects back off on a fixed interval rather than

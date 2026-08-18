@@ -83,7 +83,7 @@ live-data stream.
 | Type byte | Page | Payload |
 | --- | --- | --- |
 | `0x11` | extrema | `u16` voltage min/max in mV at 1/3; `int24` current min/max in mA at 5/8; `int24` power min/max in mW at 11/14; `int8` temperature min/max in C at 17/18; validity flags at 19 use the Binary Telemetry v1 flag bits. |
-| `0x12` | directional energy | `int32` discharged Ah, charged Ah, discharged Wh and charged Wh at offsets 1, 5, 9 and 13, each scaled to milli-units. |
+| `0x12` | directional energy | `int32` discharged Ah, charged Ah, discharged Wh and charged Wh at offsets 1, 5, 9 and 13, each scaled to milli-units. `u8` at 17: 1 if session Ah/Wh persistence is enabled (firmware 0.5.15+, see command `16`), else 0. |
 | `0x13` | monitor state | flags at 1: sensor OK, display on, INA configured, readback valid, wide shunt range, Wi-Fi AP ready, stored calibration. `u16` sequence at 2; `u32` uptime seconds, successful samples and failed samples at 4/8/12; Wi-Fi client count at 16; reset-reason code at 17; conversion time in us at 18. |
 | `0x14` | calibration | stored flag at 1; `u32` shunt resistance in micro-ohms at 2; `int32` offset in nanovolts at 6; `int32` gain in ppm at 10; current shunt voltage in nanovolts at 14; shunt-valid flag at 18. |
 | `0x15` | shunt/config | `int32` shunt min/max in nanovolts at 1/5; INA CONFIG/ADC_CONFIG at 9/11; averages/conversion time at 13/15; temperature min/max in C at 17/18; bit 0 shunt extrema valid and bit 1 temperature extrema valid at 19. |
@@ -123,6 +123,7 @@ the app observes the resulting state on the next dashboard page.
 | `13` | none | Reconnect the load after an automatic trip. `Applied` if it was tripped and the trigger condition has cleared (or if it was not tripped at all — a no-op success); `Failed` if it is still tripped and the condition is still active. Never auto-reconnects on its own. |
 | `14` | none | Bench-test hook: force the relay closed (load connected) right now, bypassing the enabled flag and every threshold. Always `Applied`. |
 | `15` | none | Bench-test hook: force the relay open (load disconnected) right now, bypassing the enabled flag and every threshold. Always `Applied`. |
+| `16` | `u8` enabled flag | Save whether session Ah/Wh totals persist across reboots. Off by default — session counters have always reset on every power cycle, so persisting them is opt-in rather than a silent behavior change. Enabling starts persisting the totals already accumulating in RAM; it does not restore an old persisted value from before a previous disable. |
 
 Every app-originated command appends a `u16` request ID. A command is not
 considered successful until its matching Control Result notification reports
@@ -130,7 +131,8 @@ that the monitor applied it; a BLE write response only confirms receipt.
 Commands `7` and `8` echo the resulting state on the next Wi-Fi station
 dashboard page (`0x17`) rather than in the Control Result itself; commands `9`,
 `10` and `11` do the same on the state-of-charge page (`0x18`); commands `12`,
-`13`, `14` and `15` do the same on the load-protection page (`0x19`).
+`13`, `14` and `15` do the same on the load-protection page (`0x19`); command
+`16` does the same on the directional-energy page (`0x12`).
 
 Command `7`'s payload can reach 99 bytes, well past the 20-byte notification
 size but still comfortably under a negotiated MTU. Request a larger MTU
@@ -160,11 +162,20 @@ The readable device-information characteristic is:
 ```
 
 Its UTF-8 value is a semicolon-separated diagnostic string, currently
-`FW=<firmware-version>;HW=<hardware-revision>;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1`.
+`FW=<firmware-version>;HW=<hardware-revision>;ID=<stable-device-id>;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1,energyp1`.
 Clients must ignore unknown keys so information can be added without a protocol
 break. The app must enable the BLE Wi-Fi settings UI only when this list
 includes `wifi1`, the state-of-charge/time-to-go UI only when it includes
-`soc1`, and the load-protection relay UI only when it includes `protection1`.
+`soc1`, the load-protection relay UI only when it includes `protection1`, and
+the session-energy-persistence toggle only when it includes `energyp1`.
+
+`ID` is 12 uppercase hex characters derived from `ESP.getEfuseMac()`, the
+factory-programmed base MAC burned into the chip's eFuse. It is stable across
+reboots, NVS erases and Wi-Fi reconfiguration, and independent of any BLE
+address a client's OS assigns the peripheral — which on iOS in particular is
+a privacy-scoped identifier (`CBPeripheral.identifier`) that can change over
+time even for the same physical monitor. Use `ID`, not a platform BLE
+address, to recognize "the same monitor" across reconnects.
 
 ## Firmware Transfer v1
 

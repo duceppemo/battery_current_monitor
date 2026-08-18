@@ -169,6 +169,8 @@ void BatteryMonitorApp::begin()
     mqttSettings_.begin();
     loadProtectionSettings_.begin();
     loadProtectionMonitor_.begin();
+    energyPersistenceSettings_.begin();
+    energy_.begin(energyPersistenceSettings_.current());
     sensor_.setCalibration(calibration_.current());
     const CurrentCalibration& activeCalibration = calibration_.current();
     Serial.printf(
@@ -191,7 +193,7 @@ void BatteryMonitorApp::begin()
     initial.sampledAtMs = millis();
     telemetry_.update(initial);
     alarmMonitor_.update(initial, alarms_.current());
-    energy_.update(initial);
+    energy_.update(initial, energyPersistenceSettings_.current());
     stateOfCharge_.update(initial, batteryProfile_.current(), initial.sampledAtMs);
 
     ble_.begin(firmwareUpdate_);
@@ -199,7 +201,7 @@ void BatteryMonitorApp::begin()
     web_.begin(
         telemetry_, energy_.totals(), sensor_, calibration_, alarms_, alarmMonitor_,
         firmwareUpdate_, batteryProfile_, stateOfCharge_, mqttSettings_, mqttPublisher_,
-        loadProtectionSettings_, loadProtectionMonitor_
+        loadProtectionSettings_, loadProtectionMonitor_, energyPersistenceSettings_
     );
     bootCheckpoint = 8;
     web_.setCalibrationStatus(
@@ -335,7 +337,7 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
     }
 
     if (ble_.consumeSessionResetRequested(bleRequestId)) {
-        energy_.reset();
+        energy_.reset(energyPersistenceSettings_.current());
         ble_.reportControlResult(2, bleRequestId, BleTelemetryService::ControlResult::Applied);
         logRuntimeEvent("Energy session reset from BLE app.");
     }
@@ -378,7 +380,7 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
     }
 
     if (web_.consumeSessionResetRequested()) {
-        energy_.reset();
+        energy_.reset(energyPersistenceSettings_.current());
         logRuntimeEvent("Energy session reset from web UI.");
     }
 
@@ -480,6 +482,21 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
     if (web_.consumeLoadProtectionTestConnectRequested()) {
         loadProtectionMonitor_.testConnect();
         logRuntimeEvent("Load relay test: forced connect from web UI.");
+    }
+
+    EnergyPersistenceConfig requestedEnergyPersistence;
+    if (web_.consumeEnergyPersistenceSaveRequested(requestedEnergyPersistence)) {
+        // Deliberately does not call energy_.begin() here: that would
+        // restore whatever was last on NVS, discarding the live totals this
+        // session has accumulated since boot if persistence was previously
+        // enabled, then disabled, then re-enabled. begin() is a boot-time
+        // restore only; toggling this setting on just starts persisting the
+        // totals already running in RAM from here on.
+        if (energyPersistenceSettings_.save(requestedEnergyPersistence)) {
+            logRuntimeEvent("Energy persistence setting saved from web UI.");
+        } else {
+            logRuntimeEvent("Energy persistence setting save from web UI failed.");
+        }
     }
 
     if (ble_.consumeCalibrationSaveRequested(requestedCalibration, bleRequestId)) {
@@ -598,6 +615,19 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         ble_.reportControlResult(15, bleRequestId, BleTelemetryService::ControlResult::Applied);
         logRuntimeEvent("Load relay test: forced disconnect from BLE app.");
     }
+
+    EnergyPersistenceConfig requestedEnergyPersistenceBle;
+    if (ble_.consumeEnergyPersistenceSaveRequested(requestedEnergyPersistenceBle, bleRequestId)) {
+        // See the matching web-UI handler above: no energy_.begin() call
+        // here either, for the same reason.
+        if (energyPersistenceSettings_.save(requestedEnergyPersistenceBle)) {
+            ble_.reportControlResult(16, bleRequestId, BleTelemetryService::ControlResult::Applied);
+            logRuntimeEvent("Energy persistence setting saved from BLE app.");
+        } else {
+            ble_.reportControlResult(16, bleRequestId, BleTelemetryService::ControlResult::Failed);
+            logRuntimeEvent("Energy persistence setting save from BLE app failed.");
+        }
+    }
 }
 
 void BatteryMonitorApp::resetPhysicalSessionState()
@@ -606,7 +636,7 @@ void BatteryMonitorApp::resetPhysicalSessionState()
     // user-visible session value. Add future history/persistent-session reset
     // hooks here rather than creating incompatible button semantics later.
     telemetry_.resetExtrema();
-    energy_.reset();
+    energy_.reset(energyPersistenceSettings_.current());
 }
 
 void BatteryMonitorApp::updateMeasurement(uint32_t nowMs)
@@ -623,7 +653,7 @@ void BatteryMonitorApp::updateMeasurement(uint32_t nowMs)
     sample.sampledAtMs = completedAtMs;
     telemetry_.update(sample);
     alarmMonitor_.update(sample, alarms_.current());
-    energy_.update(sample);
+    energy_.update(sample, energyPersistenceSettings_.current());
     stateOfCharge_.update(sample, batteryProfile_.current(), completedAtMs);
     loadProtectionMonitor_.update(
         loadProtectionSettings_.current(), sample, stateOfCharge_, batteryProfile_.current()
@@ -677,7 +707,8 @@ void BatteryMonitorApp::updateBle(uint32_t nowMs)
         batteryProfile_.current(),
         stateOfCharge_,
         loadProtectionSettings_.current(),
-        loadProtectionMonitor_
+        loadProtectionMonitor_,
+        energyPersistenceSettings_.current()
     );
 }
 

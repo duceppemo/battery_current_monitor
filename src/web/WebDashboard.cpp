@@ -82,6 +82,11 @@ namespace
         settings.enabled = server.hasArg("enabled") && server.arg("enabled") == "1";
         return LoadProtectionSettings::isValid(settings);
     }
+
+    void parseEnergyPersistenceSettings(WebServer& server, EnergyPersistenceConfig& settings)
+    {
+        settings.enabled = server.hasArg("enabled") && server.arg("enabled") == "1";
+    }
 }
 
 void WebDashboard::begin(
@@ -97,7 +102,8 @@ void WebDashboard::begin(
     const MqttSettings& mqttSettings,
     MqttPublisher& mqttPublisher,
     const LoadProtectionSettings& loadProtectionSettings,
-    LoadProtectionMonitor& loadProtectionMonitor)
+    LoadProtectionMonitor& loadProtectionMonitor,
+    const EnergyPersistenceSettings& energyPersistenceSettings)
 {
     store_ = &store;
     energyTotals_ = &energyTotals;
@@ -112,6 +118,7 @@ void WebDashboard::begin(
     mqttPublisher_ = &mqttPublisher;
     loadProtectionSettings_ = &loadProtectionSettings;
     loadProtectionMonitor_ = &loadProtectionMonitor;
+    energyPersistenceSettings_ = &energyPersistenceSettings;
     telemetryJson_.reserve(1400);
 
     WiFi.persistent(false);
@@ -137,6 +144,7 @@ void WebDashboard::begin(
     server_.on("/api/protection/reconnect", HTTP_POST, [this]() { handleLoadProtectionReconnect(); });
     server_.on("/api/protection/test-disconnect", HTTP_POST, [this]() { handleLoadProtectionTestDisconnect(); });
     server_.on("/api/protection/test-connect", HTTP_POST, [this]() { handleLoadProtectionTestConnect(); });
+    server_.on("/api/energy-persistence/save", HTTP_POST, [this]() { handleEnergyPersistenceSave(); });
     server_.on("/api/firmware", HTTP_POST,
         [this]() {
             if (firmwareUpdateSucceeded_) {
@@ -299,6 +307,13 @@ bool WebDashboard::consumeLoadProtectionTestDisconnectRequested()
 bool WebDashboard::consumeLoadProtectionTestConnectRequested()
 {
     return consumeCommand(PendingCommand::TestConnectLoad);
+}
+
+bool WebDashboard::consumeEnergyPersistenceSaveRequested(EnergyPersistenceConfig& settings)
+{
+    if (!consumeCommand(PendingCommand::SaveEnergyPersistence)) return false;
+    settings = pendingEnergyPersistence_;
+    return true;
 }
 
 void WebDashboard::setCalibrationStatus(const char* status)
@@ -499,7 +514,8 @@ bool WebDashboard::buildTelemetryJson(String& json)
         calibration_ == nullptr || alarms_ == nullptr || alarmMonitor_ == nullptr ||
         batteryProfile_ == nullptr || stateOfCharge_ == nullptr ||
         mqttSettings_ == nullptr || mqttPublisher_ == nullptr ||
-        loadProtectionSettings_ == nullptr || loadProtectionMonitor_ == nullptr) {
+        loadProtectionSettings_ == nullptr || loadProtectionMonitor_ == nullptr ||
+        energyPersistenceSettings_ == nullptr) {
         return false;
     }
 
@@ -533,6 +549,8 @@ bool WebDashboard::buildTelemetryJson(String& json)
     appendNullableFloat(json, true, energyTotals_->chargedAh, 6);
     json += ",\"chargedWh\":";
     appendNullableFloat(json, true, energyTotals_->chargedWh, 6);
+    json += ",\"persistEnabled\":";
+    json += energyPersistenceSettings_->current().enabled ? "true" : "false";
     json += "}";
 
     const BatteryProfileSettings& batteryProfile = batteryProfile_->current();
@@ -860,6 +878,18 @@ void WebDashboard::handleLoadProtectionTestConnect()
         server_.send(409, "application/json", "{\"error\":\"command pending\"}");
         return;
     }
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleEnergyPersistenceSave()
+{
+    EnergyPersistenceConfig requested;
+    parseEnergyPersistenceSettings(server_, requested);
+    if (!queueCommand(PendingCommand::SaveEnergyPersistence)) {
+        server_.send(409, "application/json", "{\"error\":\"command pending\"}");
+        return;
+    }
+    pendingEnergyPersistence_ = requested;
     server_.send(202, "application/json", "{\"ok\":true}");
 }
 

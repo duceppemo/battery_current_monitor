@@ -75,6 +75,7 @@ namespace
     constexpr uint8_t CONTROL_RECONNECT_LOAD = 13;
     constexpr uint8_t CONTROL_TEST_CONNECT_LOAD = 14;
     constexpr uint8_t CONTROL_TEST_DISCONNECT_LOAD = 15;
+    constexpr uint8_t CONTROL_SAVE_ENERGY_PERSISTENCE = 16;
     constexpr size_t FIRMWARE_UPDATE_STATUS_SIZE = 12;
     constexpr size_t CONTROL_STATUS_SIZE = 6;
 
@@ -352,13 +353,23 @@ void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
         initialFirmwareStatus, sizeof(initialFirmwareStatus));
     uint8_t initialControlStatus[CONTROL_STATUS_SIZE] = {1};
     controlStatusCharacteristic_->setValue(initialControlStatus, sizeof(initialControlStatus));
-    char deviceInfo[96];
+    // ESP.getEfuseMac() is the factory-programmed base MAC burned into the
+    // chip's eFuse at manufacture; unlike WiFi.macAddress() it never depends
+    // on which radio interface (AP/STA) queried it, and it survives NVS
+    // erases. That makes it a stable per-chip identity independent of a
+    // phone's own BLE address for the peripheral, which iOS in particular
+    // exposes as a privacy-scoped identifier that can change over time.
+    char idHex[16];
+    snprintf(idHex, sizeof(idHex), "%012llX",
+        static_cast<unsigned long long>(ESP.getEfuseMac()));
+    char deviceInfo[128];
     snprintf(
         deviceInfo,
         sizeof(deviceInfo),
-        "FW=%s;HW=%s;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1",
+        "FW=%s;HW=%s;ID=%s;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1,energyp1",
         Config::FIRMWARE_VERSION,
-        Config::HARDWARE_REVISION
+        Config::HARDWARE_REVISION,
+        idHex
     );
     deviceInfoCharacteristic_->setValue(deviceInfo);
 
@@ -463,7 +474,8 @@ void BleTelemetryService::publish(
     const BatteryProfileSettings& batteryProfile,
     const StateOfChargeEstimator& stateOfCharge,
     const LoadProtectionConfig& loadProtection,
-    const LoadProtectionMonitor& loadProtectionMonitor)
+    const LoadProtectionMonitor& loadProtectionMonitor,
+    const EnergyPersistenceConfig& energyPersistence)
 {
     const Telemetry& telemetry = store.current();
     const bool notify = connected();
@@ -545,7 +557,8 @@ void BleTelemetryService::publish(
     publishDashboardPackets(store, energy, sensor, calibration, alarms, alarmState, calibrationStored,
                             displayOn, accessPointReady, resetReason, wifiClients,
                             stationConfigured, stationConnected, mdnsReady, stationIp,
-                            batteryProfile, stateOfCharge, loadProtection, loadProtectionMonitor, notify);
+                            batteryProfile, stateOfCharge, loadProtection, loadProtectionMonitor,
+                            energyPersistence, notify);
 
     publishFirmwareUpdateStatus(notify);
 }
@@ -607,6 +620,7 @@ void BleTelemetryService::publishDashboardPackets(
     const StateOfChargeEstimator& stateOfCharge,
     const LoadProtectionConfig& loadProtection,
     const LoadProtectionMonitor& loadProtectionMonitor,
+    const EnergyPersistenceConfig& energyPersistence,
     bool notify)
 {
     // Cycle one compact data page per scheduled BLE update. This keeps the
@@ -652,6 +666,7 @@ void BleTelemetryService::publishDashboardPackets(
                                                 std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
         writeInt32LE(packet + 13, roundAndClamp(energy.chargedWh, 1000.0f,
                                                  std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        packet[17] = energyPersistence.enabled ? 1 : 0;
         break;
     case 2: {
         packet[0] = DASHBOARD_STATE;
@@ -812,6 +827,11 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
     case CONTROL_RECONNECT_LOAD: command = PendingCommand::ReconnectLoad; break;
     case CONTROL_TEST_CONNECT_LOAD: command = PendingCommand::TestConnectLoad; break;
     case CONTROL_TEST_DISCONNECT_LOAD: command = PendingCommand::TestDisconnectLoad; break;
+    case CONTROL_SAVE_ENERGY_PERSISTENCE:
+        // command(1) + enabledFlag(1) + requestId(2)
+        if (value.length() < 4) return;
+        command = PendingCommand::SaveEnergyPersistence;
+        break;
     case CONTROL_SAVE_WIFI: {
         // command(1) + ssidLength(1) + ssid + passwordLength(1) + password + requestId(2)
         if (value.length() < 6) return;
@@ -859,6 +879,8 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
             owner_.pendingProtectionEnabled_.store(data[1]);
             owner_.pendingProtectionLowVoltageMv_.store(data[2] | (data[3] << 8));
             owner_.pendingProtectionLowSocDeciPercent_.store(data[4] | (data[5] << 8));
+        } else if (command == PendingCommand::SaveEnergyPersistence) {
+            owner_.pendingEnergyPersistenceEnabled_.store(data[1]);
         }
         owner_.pendingCommand_.store(static_cast<uint8_t>(command));
     } else {
@@ -1003,6 +1025,15 @@ bool BleTelemetryService::consumeLoadProtectionTestConnectRequested(uint16_t& re
 bool BleTelemetryService::consumeLoadProtectionTestDisconnectRequested(uint16_t& requestId)
 {
     return consumeCommand(PendingCommand::TestDisconnectLoad, requestId);
+}
+
+bool BleTelemetryService::consumeEnergyPersistenceSaveRequested(
+    EnergyPersistenceConfig& settings,
+    uint16_t& requestId)
+{
+    if (!consumeCommand(PendingCommand::SaveEnergyPersistence, requestId)) return false;
+    settings.enabled = pendingEnergyPersistenceEnabled_.load() != 0;
+    return true;
 }
 
 void BleTelemetryService::maintain()

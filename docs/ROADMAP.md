@@ -67,7 +67,13 @@ JSON and BLE.
 2. [x] Build the Flutter companion app: service-filtered scan, connection lifecycle, binary-telemetry decoding, controls, calibration, alarms and a live dashboard.
 3. [x] Add an app-local bounded session history buffer with an explicit 7,200-entry retention policy and trend views.
 4. [x] Add user-approved CSV export from the app-local session log. Consider bounded LittleFS persistence and wear limits only as a separate device-side feature.
-5. Make session-counter persistence opt-in and crash-safe.
+5. [x] Make session-counter persistence opt-in and crash-safe:
+   `EnergyPersistenceSettings` (disabled by default) plus periodic,
+   schema-guarded NVS persistence in `EnergyAccumulator`, on the Web
+   Dashboard's Session energy card and over BLE (dashboard page `0x12` byte
+   17, control command `16`). A reset force-persists immediately so a crash
+   before the next periodic tick can't resurrect pre-reset totals; enabling
+   the setting never restores an old persisted value over live totals.
 6. [x] Add configurable Wi-Fi station/AP modes, credentials and mDNS. Keep the `BatteryMonitor` AP as a concurrent recovery path, store credentials in a dedicated NVS namespace and retry station association without blocking measurements.
 7. [x] Let the BLE app set and clear home Wi-Fi station credentials too, so a phone never has to leave its own network to join the monitor's recovery AP just to configure it. The Web Dashboard path stays available as an alternative.
 
@@ -75,7 +81,7 @@ JSON and BLE.
 
 ## Phase 5 — Serviceability
 
-1. [x] Add build metadata and diagnostics: firmware version, hardware revision and advertised BLE capabilities are exposed to Web and BLE clients.
+1. [x] Add build metadata and diagnostics: firmware version, hardware revision and advertised BLE capabilities are exposed to Web and BLE clients. Device Information also includes a stable per-chip `ID` (from `ESP.getEfuseMac()`) so a BLE client can recognize "the same monitor" across reconnects independent of any OS-assigned peripheral address — notably useful on iOS, where that address is a privacy-scoped identifier that can change over time for the same physical device.
 2. [x] Add local Web Dashboard `.bin` upload and a BLE transfer path with
    sequential offsets, CRC-32 and ESP32 image validation. Keep the Web path as
    recovery while the app downloads release assets before joining the monitor.

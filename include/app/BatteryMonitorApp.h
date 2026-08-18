@@ -52,6 +52,7 @@ private:
     MqttPublisher mqttPublisher_;
     LoadProtectionSettings loadProtectionSettings_;
     LoadProtectionMonitor loadProtectionMonitor_;
+    EnergyPersistenceSettings energyPersistenceSettings_;
 
     DebouncedButton resetExtremaButton_;
     DebouncedButton displayToggleButton_;

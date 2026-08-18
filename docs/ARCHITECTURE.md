@@ -77,14 +77,36 @@ validated and applied by `BatteryMonitorApp`, which persists settings before
 returning a control result. Alarms never perform a hardware read or maintain a
 second sample cache.
 
+### `EnergyAccumulator` and `EnergyPersistenceSettings`
+
+`EnergyAccumulator` integrates net/directional Ah and Wh from consecutive
+valid `Telemetry` samples. Session totals reset on every power cycle by
+default, matching the meaning "session" has had since this project's
+baseline. `EnergyPersistenceSettings` owns one validated NVS flag (disabled
+by default, analogous to the other `*Settings` types) that opts into
+surviving a reboot instead. When enabled, `EnergyAccumulator` persists its
+own running totals to a separate NVS namespace on the same periodic,
+not-every-sample cadence as `StateOfChargeEstimator`, using the same
+schema-invalidate-then-rewrite-then-revalidate write order so a power loss
+mid-write cannot leave a blob that still reads as schema-valid. `reset()`
+force-persists immediately when enabled, rather than waiting for the next
+periodic tick, since a crash before that tick would otherwise restore the
+pre-reset totals on the next boot and silently undo the operator's reset.
+Toggling the setting on does not restore an old persisted value into the
+live totals — `begin()` is a boot-time restore only; enabling mid-session
+just starts persisting whatever total is already accumulating in RAM, since
+restoring here could otherwise discard live progress if the operator had
+previously enabled, accumulated, disabled and is now re-enabling.
+
 ### `BatteryProfile` and `StateOfChargeEstimator`
 
 `BatteryProfile` owns one versioned NVS profile (rated capacity, charged
 voltage) analogous to `CalibrationSettings`/`AlarmSettings`. `StateOfChargeEstimator`
 coulomb-counts remaining amp-hours against that profile — unlike
-`EnergyAccumulator`'s per-power-on-session Ah/Wh (which intentionally resets
-every boot), this must survive reboots to be a useful fuel gauge, so it
-persists its running state to its own NVS namespace periodically (not on
+`EnergyAccumulator`'s per-power-on-session Ah/Wh (which resets every boot
+unless the operator has explicitly opted into persistence; see below), this
+must survive reboots to be a useful fuel gauge, so it always persists its
+running state to its own NVS namespace periodically (not on
 every sample, to bound flash writes) and has no notion of "correct" SoC until
 a full-charge sync happens — automatically (sustained voltage at or above the
 charged voltage with a tapering current) or manually from Web/BLE. It also
@@ -101,7 +123,7 @@ Owns the latest snapshot and extrema. It updates each statistic only with a fini
 
 ### Presentation and transport components
 
-`OledDisplay`, `BleTelemetryService` and `WebDashboard` consume stored state only. `WebDashboard` owns the always-on recovery SoftAP, optional home-network station association, mDNS, HTTP and JSON serialization. It also runs a push-only `WebSocketsServer` on port 81, purely for pushing the same telemetry JSON as `/api/telemetry` to connected browsers, broadcast only when at least one client is connected and gated at the measurement interval; every REST endpoint (settings, calibration, OTA) stays on the synchronous `WebServer` on port 80, untouched. The dashboard page prefers the socket and falls back to polling `/api/telemetry` if it never connects. `WifiSettings` keeps station credentials in its own NVS namespace and never exposes the password in telemetry. `BleTelemetryService` owns GATT, advertising state and the documented binary mobile-app telemetry contract. BLE control writes are queued for the application loop and return a request-ID-matched result on `control1`. Neither transport performs I2C work or retains a competing measurement cache.
+`OledDisplay`, `BleTelemetryService` and `WebDashboard` consume stored state only. `WebDashboard` owns the always-on recovery SoftAP, optional home-network station association, mDNS, HTTP and JSON serialization. It also runs a push-only `WebSocketsServer` on port 81, purely for pushing the same telemetry JSON as `/api/telemetry` to connected browsers, broadcast only when at least one client is connected and gated at the measurement interval; every REST endpoint (settings, calibration, OTA) stays on the synchronous `WebServer` on port 80, untouched. The dashboard page prefers the socket and falls back to polling `/api/telemetry` if it never connects. `WifiSettings` keeps station credentials in its own NVS namespace and never exposes the password in telemetry. `BleTelemetryService` owns GATT, advertising state and the documented binary mobile-app telemetry contract. BLE control writes are queued for the application loop and return a request-ID-matched result on `control1`. Its Device Information string also includes a stable per-chip `ID` derived from `ESP.getEfuseMac()`, independent of any BLE address a client's OS assigns the peripheral — the appropriate identity for a client to recognize "the same monitor" across reconnects, since a phone-provided identifier (especially iOS's privacy-scoped `CBPeripheral.identifier`) can change over time for the same physical device. Neither transport performs I2C work or retains a competing measurement cache.
 
 ### `MqttSettings` and `MqttPublisher`
 

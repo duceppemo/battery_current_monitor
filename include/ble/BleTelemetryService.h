@@ -41,7 +41,8 @@ public:
                  const BatteryProfileSettings& batteryProfile,
                  const StateOfChargeEstimator& stateOfCharge,
                  const LoadProtectionConfig& loadProtection,
-                 const LoadProtectionMonitor& loadProtectionMonitor);
+                 const LoadProtectionMonitor& loadProtectionMonitor,
+                 const EnergyPersistenceConfig& energyPersistence);
     void maintain();
 
     bool consumeResetExtremaRequested(uint16_t& requestId);
@@ -59,6 +60,7 @@ public:
     bool consumeLoadProtectionReconnectRequested(uint16_t& requestId);
     bool consumeLoadProtectionTestConnectRequested(uint16_t& requestId);
     bool consumeLoadProtectionTestDisconnectRequested(uint16_t& requestId);
+    bool consumeEnergyPersistenceSaveRequested(EnergyPersistenceConfig& settings, uint16_t& requestId);
     void reportControlResult(uint8_t command, uint16_t requestId, ControlResult result);
 
     bool connected() const { return connected_.load(); }
@@ -113,6 +115,7 @@ private:
         ReconnectLoad,
         TestConnectLoad,
         TestDisconnectLoad,
+        SaveEnergyPersistence,
         Writing = 255
     };
 
@@ -157,6 +160,7 @@ private:
         const StateOfChargeEstimator& stateOfCharge,
         const LoadProtectionConfig& loadProtection,
         const LoadProtectionMonitor& loadProtectionMonitor,
+        const EnergyPersistenceConfig& energyPersistence,
         bool notify
     );
     void publishFirmwareUpdateStatus(bool notify);
@@ -207,6 +211,7 @@ private:
     std::atomic_uint8_t pendingProtectionEnabled_{0};
     std::atomic_int32_t pendingProtectionLowVoltageMv_{0};
     std::atomic_int32_t pendingProtectionLowSocDeciPercent_{0};
+    std::atomic_uint8_t pendingEnergyPersistenceEnabled_{0};
     std::atomic_uint8_t controlStatusCommand_{0};
     std::atomic_uint16_t controlStatusRequestId_{0};
     std::atomic_uint8_t controlStatusResult_{0};

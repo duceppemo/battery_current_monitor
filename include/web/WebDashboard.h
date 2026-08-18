@@ -31,7 +31,8 @@ public:
         const MqttSettings& mqttSettings,
         MqttPublisher& mqttPublisher,
         const LoadProtectionSettings& loadProtectionSettings,
-        LoadProtectionMonitor& loadProtectionMonitor
+        LoadProtectionMonitor& loadProtectionMonitor,
+        const EnergyPersistenceSettings& energyPersistenceSettings
     );
     void update();
     bool consumeDisplayToggleRequested();
@@ -50,6 +51,7 @@ public:
     bool consumeLoadProtectionReconnectRequested();
     bool consumeLoadProtectionTestDisconnectRequested();
     bool consumeLoadProtectionTestConnectRequested();
+    bool consumeEnergyPersistenceSaveRequested(EnergyPersistenceConfig& settings);
 
     void setRuntimeStatus(
         bool bleConnected,
@@ -83,7 +85,8 @@ private:
         SaveLoadProtection,
         ReconnectLoad,
         TestDisconnectLoad,
-        TestConnectLoad
+        TestConnectLoad,
+        SaveEnergyPersistence
     };
 
     bool buildTelemetryJson(String& json);
@@ -107,6 +110,7 @@ private:
     void handleLoadProtectionReconnect();
     void handleLoadProtectionTestDisconnect();
     void handleLoadProtectionTestConnect();
+    void handleEnergyPersistenceSave();
     void handleFirmwareUpload();
     void handleNotFound();
     bool startAccessPoint();
@@ -153,6 +157,7 @@ private:
     MqttPublisher* mqttPublisher_ = nullptr;
     const LoadProtectionSettings* loadProtectionSettings_ = nullptr;
     LoadProtectionMonitor* loadProtectionMonitor_ = nullptr;
+    const EnergyPersistenceSettings* energyPersistenceSettings_ = nullptr;
     String telemetryJson_;
 
     bool running_ = false;
@@ -173,6 +178,7 @@ private:
     BatteryProfileSettings pendingBatteryProfile_;
     MqttBrokerSettings pendingMqttSettings_;
     LoadProtectionConfig pendingLoadProtection_;
+    EnergyPersistenceConfig pendingEnergyPersistence_;
     char calibrationStatus_[48] = "unchanged";
     uint32_t successfulSamples_ = 0;
     uint32_t failedSamples_ = 0;
