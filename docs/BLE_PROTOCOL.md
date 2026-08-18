@@ -74,8 +74,8 @@ The companion app also subscribes to the Dashboard Data characteristic:
 ```
 
 It supports `Read` and `Notify`. Each notification is one 20-byte
-little-endian page. Firmware rotates through eight pages once per one-second
-BLE update, so the app has a complete dashboard within roughly eight seconds
+little-endian page. Firmware rotates through nine pages once per one-second
+BLE update, so the app has a complete dashboard within roughly nine seconds
 after connecting.
 The live Binary Telemetry v1 characteristic remains the authoritative fast
 live-data stream.
@@ -90,6 +90,7 @@ live-data stream.
 | `0x16` | alarms | enabled flags at 1: bit 0 low voltage, bit 1 high voltage, bit 2 current, bit 3 temperature, bit 4 sensor health; active-alarm flags (same bits) at 2; `u16` low/high voltage in mV at 3/5; `int24` max absolute current in mA at 7; `int32` max temperature in deci-C at 10. |
 | `0x17` | Wi-Fi station | flags at 1: bit 0 station configured, bit 1 station connected, bit 2 mDNS ready; station IPv4 as four raw octets at 2-5 (all zero when not connected). The recovery AP (`BatteryMonitor` / `192.168.4.1`) is always available regardless of these flags. |
 | `0x18` | state of charge | flags at 1: bit 0 synced/known, bit 1 currently discharging (time-to-empty applicable). `u16` state of charge at 2, in 0.1% units (0-1000; meaningless until synced). `u32` time-to-empty in seconds at 4 (`0xFFFFFFFF` when not discharging or not synced). `u32` configured capacity in milli-Ah at 8. `u16` configured charged voltage in mV at 12. `u16` deepest discharge ever at 14, in 0.1% units (persists across reboots until reset). `u16` full-charge cycle count at 16. `u16` average discharge depth per cycle at 18, in 0.1% units (meaningless when the cycle count is 0). |
+| `0x19` | load protection | flags at 1: bit 0 enabled, bit 1 relay engaged (load connected), bit 2 tripped (latched). `u8` trip-reason flags at 2 (same bits as breach flags below, latched at the moment of a trip; bit 2/`4` means a manual test-disconnect rather than a threshold breach). `u8` live breach flags at 3: bit 0 voltage currently below threshold, bit 1 SoC currently below threshold — independent of the latch, this is what a reconnect attempt is actually checked against right now. `u16` configured low-voltage threshold in mV at 4. `u16` configured low-SoC threshold at 6, in 0.1% units. |
 
 Unknown page types must be ignored. All pages are fixed at 20 bytes; a client
 must not rely on an enlarged ATT MTU.
@@ -118,13 +119,18 @@ the app observes the resulting state on the next dashboard page.
 | `9` | `u32` capacity in milli-Ah, `u16` charged voltage in mV | Save the battery profile used for state-of-charge coulomb counting. Rejected if capacity is not in (0, 10000] Ah or charged voltage is not in (0, 100] V. |
 | `10` | none | Manually sync the fuel gauge to 100% now (e.g. once you know the battery is actually full). The monitor also does this automatically once voltage stays at or above the profile's charged voltage with a tapering (near-zero) current for 3 minutes. A sync from an already-known baseline also records one full-charge cycle: the discharge depth since the last sync updates the deepest-discharge and average-depth history. |
 | `11` | none | Reset the deepest-discharge, cycle-count and average-depth history (e.g. after replacing the physical battery). Does not affect the current charge level. |
+| `12` | `u8` enabled flag, low-voltage threshold in mV as `u16`, low-SoC threshold as `u16` in 0.1% units | Save the load-protection relay profile. Off by default; the relay stays permanently connected until this is explicitly enabled. Rejected (`Failed`) if either threshold is outside 0-100 (V or %). |
+| `13` | none | Reconnect the load after an automatic trip. `Applied` if it was tripped and the trigger condition has cleared (or if it was not tripped at all — a no-op success); `Failed` if it is still tripped and the condition is still active. Never auto-reconnects on its own. |
+| `14` | none | Bench-test hook: force the relay closed (load connected) right now, bypassing the enabled flag and every threshold. Always `Applied`. |
+| `15` | none | Bench-test hook: force the relay open (load disconnected) right now, bypassing the enabled flag and every threshold. Always `Applied`. |
 
 Every app-originated command appends a `u16` request ID. A command is not
 considered successful until its matching Control Result notification reports
 that the monitor applied it; a BLE write response only confirms receipt.
 Commands `7` and `8` echo the resulting state on the next Wi-Fi station
 dashboard page (`0x17`) rather than in the Control Result itself; commands `9`,
-`10` and `11` do the same on the state-of-charge page (`0x18`).
+`10` and `11` do the same on the state-of-charge page (`0x18`); commands `12`,
+`13`, `14` and `15` do the same on the load-protection page (`0x19`).
 
 Command `7`'s payload can reach 99 bytes, well past the 20-byte notification
 size but still comfortably under a negotiated MTU. Request a larger MTU
@@ -154,11 +160,11 @@ The readable device-information characteristic is:
 ```
 
 Its UTF-8 value is a semicolon-separated diagnostic string, currently
-`FW=<firmware-version>;HW=<hardware-revision>;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1`.
+`FW=<firmware-version>;HW=<hardware-revision>;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1`.
 Clients must ignore unknown keys so information can be added without a protocol
 break. The app must enable the BLE Wi-Fi settings UI only when this list
-includes `wifi1`, and the state-of-charge/time-to-go UI only when it includes
-`soc1`.
+includes `wifi1`, the state-of-charge/time-to-go UI only when it includes
+`soc1`, and the load-protection relay UI only when it includes `protection1`.
 
 ## Firmware Transfer v1
 

@@ -142,8 +142,10 @@ by both the live "would a reconnect succeed" status in the dashboard JSON and
 the reconnect gate itself). `testConnect()`/`testDisconnect()` are a separate
 bench-test path: they bypass the enabled flag and every threshold entirely,
 since verifying the GPIO actually switches the physical relay has to work
-before the automatic logic above can be trusted at all. Like MQTT, there is
-no BLE control surface for this feature — Web Dashboard only.
+before the automatic logic above can be trusted at all. Unlike MQTT, this
+feature is exposed over both the Web Dashboard and BLE (dashboard page
+`0x19`, control commands `12`-`15`) — useful for testing or reconnecting the
+relay in the field, away from the home Wi-Fi station MQTT needs.
 
 ### `FirmwareUpdateService`
 

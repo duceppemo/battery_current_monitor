@@ -59,6 +59,7 @@ namespace
     constexpr uint8_t DASHBOARD_ALARMS = 0x16;
     constexpr uint8_t DASHBOARD_WIFI = 0x17;
     constexpr uint8_t DASHBOARD_SOC = 0x18;
+    constexpr uint8_t DASHBOARD_PROTECTION = 0x19;
     constexpr uint8_t CONTROL_RESET_EXTREMA = 1;
     constexpr uint8_t CONTROL_RESET_SESSION = 2;
     constexpr uint8_t CONTROL_TOGGLE_DISPLAY = 3;
@@ -70,6 +71,10 @@ namespace
     constexpr uint8_t CONTROL_SAVE_BATTERY_PROFILE = 9;
     constexpr uint8_t CONTROL_SYNC_BATTERY_FULL = 10;
     constexpr uint8_t CONTROL_RESET_BATTERY_HISTORY = 11;
+    constexpr uint8_t CONTROL_SAVE_LOAD_PROTECTION = 12;
+    constexpr uint8_t CONTROL_RECONNECT_LOAD = 13;
+    constexpr uint8_t CONTROL_TEST_CONNECT_LOAD = 14;
+    constexpr uint8_t CONTROL_TEST_DISCONNECT_LOAD = 15;
     constexpr size_t FIRMWARE_UPDATE_STATUS_SIZE = 12;
     constexpr size_t CONTROL_STATUS_SIZE = 6;
 
@@ -351,7 +356,7 @@ void BleTelemetryService::begin(FirmwareUpdateService& firmwareUpdate)
     snprintf(
         deviceInfo,
         sizeof(deviceInfo),
-        "FW=%s;HW=%s;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1",
+        "FW=%s;HW=%s;BLE=telemetry1,dashboard1,ota1,control1,wifi1,soc1,protection1",
         Config::FIRMWARE_VERSION,
         Config::HARDWARE_REVISION
     );
@@ -456,7 +461,9 @@ void BleTelemetryService::publish(
     bool mdnsReady,
     const uint8_t stationIp[4],
     const BatteryProfileSettings& batteryProfile,
-    const StateOfChargeEstimator& stateOfCharge)
+    const StateOfChargeEstimator& stateOfCharge,
+    const LoadProtectionConfig& loadProtection,
+    const LoadProtectionMonitor& loadProtectionMonitor)
 {
     const Telemetry& telemetry = store.current();
     const bool notify = connected();
@@ -538,7 +545,7 @@ void BleTelemetryService::publish(
     publishDashboardPackets(store, energy, sensor, calibration, alarms, alarmState, calibrationStored,
                             displayOn, accessPointReady, resetReason, wifiClients,
                             stationConfigured, stationConnected, mdnsReady, stationIp,
-                            batteryProfile, stateOfCharge, notify);
+                            batteryProfile, stateOfCharge, loadProtection, loadProtectionMonitor, notify);
 
     publishFirmwareUpdateStatus(notify);
 }
@@ -598,15 +605,17 @@ void BleTelemetryService::publishDashboardPackets(
     const uint8_t stationIp[4],
     const BatteryProfileSettings& batteryProfile,
     const StateOfChargeEstimator& stateOfCharge,
+    const LoadProtectionConfig& loadProtection,
+    const LoadProtectionMonitor& loadProtectionMonitor,
     bool notify)
 {
     // Cycle one compact data page per scheduled BLE update. This keeps the
     // link responsive on the ESP32-C3 while a newly connected app has a
-    // complete dashboard within eight seconds.
+    // complete dashboard within roughly nine seconds.
     uint8_t packet[BINARY_TELEMETRY_SIZE] = {};
     const Telemetry& telemetry = store.current();
     const Ina228ConfigurationStatus& config = sensor.configuration();
-    const uint8_t page = dashboardPacketIndex_++ % 8;
+    const uint8_t page = dashboardPacketIndex_++ % 9;
 
     switch (page) {
     case 0: {
@@ -720,6 +729,20 @@ void BleTelemetryService::publishDashboardPackets(
         packet[4] = stationIp[2];
         packet[5] = stationIp[3];
         break;
+    case 7: {
+        packet[0] = DASHBOARD_PROTECTION;
+        packet[1] = (loadProtection.enabled ? 1 : 0) |
+                    (loadProtectionMonitor.relayEngaged() ? 2 : 0) |
+                    (loadProtectionMonitor.tripped() ? 4 : 0);
+        packet[2] = loadProtectionMonitor.tripFlags();
+        packet[3] = LoadProtectionMonitor::evaluateBreach(
+            loadProtection, telemetry, stateOfCharge, batteryProfile);
+        writeUint16LE(packet + 4, static_cast<uint16_t>(roundAndClamp(
+            loadProtection.lowVoltageThreshold, 1000.0f, 0, 65535)));
+        writeUint16LE(packet + 6, static_cast<uint16_t>(roundAndClamp(
+            loadProtection.lowSocPercentThreshold, 10.0f, 0, 1000)));
+        break;
+    }
     default: {
         packet[0] = DASHBOARD_SOC;
         packet[1] = (stateOfCharge.known() ? 1 : 0) | (stateOfCharge.hasTimeToEmpty() ? 2 : 0);
@@ -780,6 +803,15 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
         if (value.length() < 9) return;
         command = PendingCommand::SaveBatteryProfile;
         break;
+    case CONTROL_SAVE_LOAD_PROTECTION:
+        // command(1) + enabledFlag(1) + lowVoltage mV u16(2) + lowSocPercent
+        // deci-percent u16(2) + requestId(2)
+        if (value.length() < 8) return;
+        command = PendingCommand::SaveLoadProtection;
+        break;
+    case CONTROL_RECONNECT_LOAD: command = PendingCommand::ReconnectLoad; break;
+    case CONTROL_TEST_CONNECT_LOAD: command = PendingCommand::TestConnectLoad; break;
+    case CONTROL_TEST_DISCONNECT_LOAD: command = PendingCommand::TestDisconnectLoad; break;
     case CONTROL_SAVE_WIFI: {
         // command(1) + ssidLength(1) + ssid + passwordLength(1) + password + requestId(2)
         if (value.length() < 6) return;
@@ -823,6 +855,10 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
                 static_cast<float>(readUint32LE(data + 1)) * 1.0e-3f;
             owner_.pendingBatteryProfile_.chargedVoltage =
                 static_cast<float>(data[5] | (data[6] << 8)) * 1.0e-3f;
+        } else if (command == PendingCommand::SaveLoadProtection) {
+            owner_.pendingProtectionEnabled_.store(data[1]);
+            owner_.pendingProtectionLowVoltageMv_.store(data[2] | (data[3] << 8));
+            owner_.pendingProtectionLowSocDeciPercent_.store(data[4] | (data[5] << 8));
         }
         owner_.pendingCommand_.store(static_cast<uint8_t>(command));
     } else {
@@ -941,6 +977,32 @@ bool BleTelemetryService::consumeBatterySyncRequested(uint16_t& requestId)
 bool BleTelemetryService::consumeBatteryHistoryResetRequested(uint16_t& requestId)
 {
     return consumeCommand(PendingCommand::ResetBatteryHistory, requestId);
+}
+
+bool BleTelemetryService::consumeLoadProtectionSaveRequested(
+    LoadProtectionConfig& settings,
+    uint16_t& requestId)
+{
+    if (!consumeCommand(PendingCommand::SaveLoadProtection, requestId)) return false;
+    settings.enabled = pendingProtectionEnabled_.load() != 0;
+    settings.lowVoltageThreshold = pendingProtectionLowVoltageMv_.load() / 1000.0f;
+    settings.lowSocPercentThreshold = pendingProtectionLowSocDeciPercent_.load() / 10.0f;
+    return true;
+}
+
+bool BleTelemetryService::consumeLoadProtectionReconnectRequested(uint16_t& requestId)
+{
+    return consumeCommand(PendingCommand::ReconnectLoad, requestId);
+}
+
+bool BleTelemetryService::consumeLoadProtectionTestConnectRequested(uint16_t& requestId)
+{
+    return consumeCommand(PendingCommand::TestConnectLoad, requestId);
+}
+
+bool BleTelemetryService::consumeLoadProtectionTestDisconnectRequested(uint16_t& requestId)
+{
+    return consumeCommand(PendingCommand::TestDisconnectLoad, requestId);
 }
 
 void BleTelemetryService::maintain()

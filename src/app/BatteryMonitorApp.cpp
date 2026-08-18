@@ -561,6 +561,43 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         ble_.reportControlResult(11, bleRequestId, BleTelemetryService::ControlResult::Applied);
         logRuntimeEvent("Battery history reset from BLE app.");
     }
+
+    LoadProtectionConfig requestedProtectionBle;
+    if (ble_.consumeLoadProtectionSaveRequested(requestedProtectionBle, bleRequestId)) {
+        if (loadProtectionSettings_.save(requestedProtectionBle)) {
+            ble_.reportControlResult(12, bleRequestId, BleTelemetryService::ControlResult::Applied);
+            logRuntimeEvent("Load protection settings saved from BLE app.");
+        } else {
+            ble_.reportControlResult(12, bleRequestId, BleTelemetryService::ControlResult::Failed);
+            logRuntimeEvent("Load protection settings save from BLE app failed.");
+        }
+    }
+
+    if (ble_.consumeLoadProtectionReconnectRequested(bleRequestId)) {
+        const auto result = loadProtectionMonitor_.reconnect(
+            loadProtectionSettings_.current(), telemetry_.current(),
+            stateOfCharge_, batteryProfile_.current()
+        );
+        if (result == LoadProtectionMonitor::ReconnectResult::ConditionStillActive) {
+            ble_.reportControlResult(13, bleRequestId, BleTelemetryService::ControlResult::Failed);
+            logRuntimeEvent("Load reconnect from BLE app rejected: condition still active.");
+        } else {
+            ble_.reportControlResult(13, bleRequestId, BleTelemetryService::ControlResult::Applied);
+            logRuntimeEvent("Load reconnected from BLE app.");
+        }
+    }
+
+    if (ble_.consumeLoadProtectionTestConnectRequested(bleRequestId)) {
+        loadProtectionMonitor_.testConnect();
+        ble_.reportControlResult(14, bleRequestId, BleTelemetryService::ControlResult::Applied);
+        logRuntimeEvent("Load relay test: forced connect from BLE app.");
+    }
+
+    if (ble_.consumeLoadProtectionTestDisconnectRequested(bleRequestId)) {
+        loadProtectionMonitor_.testDisconnect();
+        ble_.reportControlResult(15, bleRequestId, BleTelemetryService::ControlResult::Applied);
+        logRuntimeEvent("Load relay test: forced disconnect from BLE app.");
+    }
 }
 
 void BatteryMonitorApp::resetPhysicalSessionState()
@@ -638,7 +675,9 @@ void BatteryMonitorApp::updateBle(uint32_t nowMs)
         web_.mdnsReady(),
         stationIp,
         batteryProfile_.current(),
-        stateOfCharge_
+        stateOfCharge_,
+        loadProtectionSettings_.current(),
+        loadProtectionMonitor_
     );
 }
 

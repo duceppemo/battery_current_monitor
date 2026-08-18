@@ -67,8 +67,8 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 - MQTT publishing with Home Assistant MQTT Discovery, configurable from the
   Web Dashboard only (requires the home Wi-Fi station; not exposed over BLE)
 - Optional low-voltage/low-SoC load-protection relay output, disabled by
-  default until explicitly configured from the Web Dashboard; manual
-  reconnect and bench-test connect/disconnect controls
+  default until explicitly configured from the Web Dashboard or BLE app;
+  manual reconnect and bench-test connect/disconnect controls on both
 - Separate Web and BLE reset controls for extrema and energy
 - Device Information reporting firmware version, hardware revision and BLE capabilities
 - Local Web Dashboard firmware `.bin` upload
@@ -190,9 +190,9 @@ not connected; the stored password is never echoed back to the dashboard.
 
 ### Load protection (optional)
 
-The Web Dashboard has a load-protection card (low-voltage cutoff, low-SoC
-cutoff, enable toggle) that drives the relay described in
-[Load-protection relay](#load-protection-relay-optional) above. It is
+Both the Web Dashboard (low-voltage cutoff, low-SoC cutoff, enable toggle)
+and the BLE app have a load-protection card that drives the relay described
+in [Load-protection relay](#load-protection-relay-optional) above. It is
 **disabled by default and does nothing until explicitly enabled**, so an
 unreviewed default threshold can never disconnect a load the operator never
 asked to protect. Once enabled, the relay opens (load disconnected) the
@@ -200,10 +200,11 @@ moment voltage or state of charge drops below its configured threshold,
 whichever happens first — SoC is only checked once the fuel gauge has been
 synced to full at least once. The trip **latches**: it never reconnects on
 its own, even if the reading recovers, so it cannot chatter if a value hovers
-right at the threshold under load. A "Reconnect load" button clears it, but
+right at the threshold under load. A "Reconnect load" control clears it, but
 is refused if the trigger condition is still active. Separate "Test: force
-connect" / "Test: force disconnect" buttons bypass all of this to bench-test
-the relay wiring directly, whether or not protection is enabled.
+connect" / "Test: force disconnect" controls bypass all of this to bench-test
+the relay wiring directly, whether or not protection is enabled, from either
+transport.
 
 ## BLE
 

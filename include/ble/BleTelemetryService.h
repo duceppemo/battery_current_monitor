@@ -15,6 +15,7 @@
 #include "measurement/CalibrationSettings.h"
 #include "network/WifiSettings.h"
 #include "ota/FirmwareUpdateService.h"
+#include "protection/LoadProtection.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
 
@@ -38,7 +39,9 @@ public:
                  bool stationConfigured, bool stationConnected, bool mdnsReady,
                  const uint8_t stationIp[4],
                  const BatteryProfileSettings& batteryProfile,
-                 const StateOfChargeEstimator& stateOfCharge);
+                 const StateOfChargeEstimator& stateOfCharge,
+                 const LoadProtectionConfig& loadProtection,
+                 const LoadProtectionMonitor& loadProtectionMonitor);
     void maintain();
 
     bool consumeResetExtremaRequested(uint16_t& requestId);
@@ -52,6 +55,10 @@ public:
     bool consumeBatteryProfileSaveRequested(BatteryProfileSettings& settings, uint16_t& requestId);
     bool consumeBatterySyncRequested(uint16_t& requestId);
     bool consumeBatteryHistoryResetRequested(uint16_t& requestId);
+    bool consumeLoadProtectionSaveRequested(LoadProtectionConfig& settings, uint16_t& requestId);
+    bool consumeLoadProtectionReconnectRequested(uint16_t& requestId);
+    bool consumeLoadProtectionTestConnectRequested(uint16_t& requestId);
+    bool consumeLoadProtectionTestDisconnectRequested(uint16_t& requestId);
     void reportControlResult(uint8_t command, uint16_t requestId, ControlResult result);
 
     bool connected() const { return connected_.load(); }
@@ -102,6 +109,10 @@ private:
         SaveBatteryProfile,
         SyncBatteryFull,
         ResetBatteryHistory,
+        SaveLoadProtection,
+        ReconnectLoad,
+        TestConnectLoad,
+        TestDisconnectLoad,
         Writing = 255
     };
 
@@ -144,6 +155,8 @@ private:
         const uint8_t stationIp[4],
         const BatteryProfileSettings& batteryProfile,
         const StateOfChargeEstimator& stateOfCharge,
+        const LoadProtectionConfig& loadProtection,
+        const LoadProtectionMonitor& loadProtectionMonitor,
         bool notify
     );
     void publishFirmwareUpdateStatus(bool notify);
@@ -191,6 +204,9 @@ private:
     // BLE callback and the consuming main-loop read.
     WifiStationSettings pendingWifiSettings_;
     BatteryProfileSettings pendingBatteryProfile_;
+    std::atomic_uint8_t pendingProtectionEnabled_{0};
+    std::atomic_int32_t pendingProtectionLowVoltageMv_{0};
+    std::atomic_int32_t pendingProtectionLowSocDeciPercent_{0};
     std::atomic_uint8_t controlStatusCommand_{0};
     std::atomic_uint16_t controlStatusRequestId_{0};
     std::atomic_uint8_t controlStatusResult_{0};

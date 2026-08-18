@@ -153,23 +153,27 @@ with live values and correct availability, without any BLE app involvement.
 1. [x] Add `LoadProtectionSettings` (enabled flag, low-voltage threshold,
    low-SoC threshold) and `LoadProtectionMonitor`, which drives a relay/SSR
    GPIO (`Config::LOAD_PROTECTION_RELAY_PIN`). Off by default and a complete
-   no-op until explicitly enabled from the Web Dashboard, so an unreviewed
-   default threshold can never disconnect a load nobody asked to protect.
+   no-op until explicitly enabled from the Web Dashboard or BLE app, so an
+   unreviewed default threshold can never disconnect a load nobody asked to
+   protect.
 2. [x] Trip (open the relay) the moment voltage or SoC crosses its threshold,
    whichever comes first, and latch — never auto-reconnect, even once the
    reading recovers, so a value hovering at the threshold under load can't
-   chatter the relay. A dashboard "Reconnect load" button clears the latch,
-   but is refused while the triggering condition is still active.
-3. [x] Add "Test: force connect" / "Test: force disconnect" dashboard
-   buttons that bypass the enabled flag and every threshold, for bench-
-   testing the relay/SSR wiring itself before trusting the automatic logic.
-4. [ ] Validate against real hardware: an InkBird SSR-25 DA switching an
-   actual load, driven through a transistor/MOSFET stage (a bare 3.3 V GPIO
-   is at the low end of the SSR's 3-32 V DC control range). Verified so far
-   only via the Web Dashboard's `/api/protection/*` endpoints against the
-   live device's own ~3.35 V USB rail (no real battery/load attached): the
-   automatic trip, the condition-gated reconnect refusal and success, and
-   both test-force endpoints all behaved correctly.
+   chatter the relay. A "Reconnect load" control clears the latch, but is
+   refused while the triggering condition is still active.
+3. [x] Add "Test: force connect" / "Test: force disconnect" controls that
+   bypass the enabled flag and every threshold, for bench-testing the
+   relay/SSR wiring itself before trusting the automatic logic.
+4. [x] Wire an InkBird SSR-25 DA to `GPIO5` through a PN2222 transistor
+   stage and confirm real hardware switching: the SSR's control LED turns on
+   with "Test: force connect" and off with "Test: force disconnect" via the
+   Web Dashboard. Still not validated against a real battery/load — only the
+   monitor's own bench-power rail so far — nor against a real automatic
+   trip under load.
+5. [x] Expose the same controls over BLE: dashboard page `0x19` and control
+   commands `12`-`15` (save, reconnect, test-connect, test-disconnect),
+   gated on the `protection1` Device Information capability, so the relay
+   can be tested and reconnected away from the home Wi-Fi station.
 
 **Done when:** the relay reliably switches a real load through the SSR, the
 threshold trip and latched-reconnect behavior are confirmed against a real
