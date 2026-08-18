@@ -196,25 +196,28 @@ void OledDisplay::showLivePage(
     bool socKnown,
     float socPercent)
 {
+    // Failed-sample count isn't shown on this compact header; it's already
+    // visible via the Web Dashboard and BLE status.
+    (void)failedSamples;
     char left[32];
     char right[32];
 
     oled_.setFont(u8g2_font_5x8_tf);
     if (socKnown) {
-        snprintf(left, sizeof(left), "%.0f%% 1/2", static_cast<double>(socPercent));
+        snprintf(left, sizeof(left), "%.0f%%", static_cast<double>(socPercent));
     } else {
-        snprintf(left, sizeof(left), "--%% 1/2");
+        snprintf(left, sizeof(left), "--%%");
     }
     oled_.drawStr(2, 8, left);
     snprintf(
         left,
         sizeof(left),
-        "B:%c W:%u F:%lu",
+        "B:%c W:%u",
         bleConnected ? 'C' : '-',
-        static_cast<unsigned>(wifiClients),
-        static_cast<unsigned long>(failedSamples)
+        static_cast<unsigned>(wifiClients)
     );
     oled_.drawStr(58, 8, left);
+    oled_.drawStr(108, 8, "1/2");
 
     oled_.setFont(u8g2_font_6x12_tf);
     formatCurrent(left, sizeof(left), telemetry.current, 2);
