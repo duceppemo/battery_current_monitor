@@ -166,6 +166,7 @@ void BatteryMonitorApp::begin()
     alarms_.begin();
     batteryProfile_.begin();
     stateOfCharge_.begin();
+    mqttSettings_.begin();
     sensor_.setCalibration(calibration_.current());
     const CurrentCalibration& activeCalibration = calibration_.current();
     Serial.printf(
@@ -195,7 +196,7 @@ void BatteryMonitorApp::begin()
     bootCheckpoint = 7;
     web_.begin(
         telemetry_, energy_.totals(), sensor_, calibration_, alarms_, alarmMonitor_,
-        firmwareUpdate_, batteryProfile_, stateOfCharge_
+        firmwareUpdate_, batteryProfile_, stateOfCharge_, mqttSettings_, mqttPublisher_
     );
     bootCheckpoint = 8;
     web_.setCalibrationStatus(
@@ -432,6 +433,15 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
         logRuntimeEvent("Battery history reset from web UI.");
     }
 
+    MqttBrokerSettings requestedMqtt;
+    if (web_.consumeMqttSettingsSaveRequested(requestedMqtt)) {
+        if (mqttSettings_.save(requestedMqtt)) {
+            logRuntimeEvent("MQTT settings saved from web UI.");
+        } else {
+            logRuntimeEvent("MQTT settings save from web UI failed.");
+        }
+    }
+
     if (ble_.consumeCalibrationSaveRequested(requestedCalibration, bleRequestId)) {
         if (calibration_.save(requestedCalibration)) {
             sensor_.setCalibration(calibration_.current());
@@ -589,6 +599,22 @@ void BatteryMonitorApp::updateBle(uint32_t nowMs)
     );
 }
 
+void BatteryMonitorApp::updateMqtt(uint32_t nowMs)
+{
+    // Reconnect and publish are both interval-gated inside MqttPublisher
+    // itself; call every loop, unthrottled here, so its underlying
+    // PubSubClient::loop() stays responsive to keepalive pings.
+    mqttPublisher_.update(
+        nowMs,
+        mqttSettings_.current(),
+        telemetry_.current(),
+        energy_.totals(),
+        batteryProfile_.current(),
+        stateOfCharge_,
+        alarmMonitor_.state()
+    );
+}
+
 void BatteryMonitorApp::updateSerial(uint32_t nowMs)
 {
     if ((nowMs - lastSerialMs_) < Config::SERIAL_INTERVAL_MS) {
@@ -666,6 +692,7 @@ void BatteryMonitorApp::update()
 
     web_.update();
     ble_.maintain();
+    updateMqtt(now);
 
     delay(2);
 }

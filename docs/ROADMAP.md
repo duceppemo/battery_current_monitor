@@ -129,6 +129,25 @@ while updating cycle history.
 degrades gracefully (no missing functionality, just slower updates) if it
 can't connect.
 
+## Phase 8 — MQTT / Home Assistant integration
+
+1. [x] Add `MqttSettings` (host, port, optional username/password, enabled
+   flag) in its own NVS namespace, and `MqttPublisher`, which connects,
+   retries on a fixed interval, and publishes retained Home Assistant MQTT
+   Discovery config plus a JSON state topic once per publish interval, using
+   MQTT's Last Will and Testament for availability. Configurable from the Web
+   Dashboard only; deliberately not exposed over BLE, since it's meaningless
+   without the home Wi-Fi station already connected.
+2. [ ] Validate end-to-end against a real broker (Mosquitto/Home Assistant on
+   the local network): confirm entities appear automatically under one
+   device, state updates track live telemetry, and availability flips to
+   "offline" promptly on power loss or Wi-Fi drop. Verified so far only
+   against the save/persist/status-reporting path and a refused connection
+   (no local broker was available to test a live connection).
+
+**Done when:** Home Assistant shows all published entities under one device
+with live values and correct availability, without any BLE app involvement.
+
 ## Non-goals until earlier phases pass
 
 - Persisting energy counters before their accuracy and reset semantics are proven.

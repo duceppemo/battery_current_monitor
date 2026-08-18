@@ -10,6 +10,7 @@
 #include "energy/StateOfChargeEstimator.h"
 #include "input/DebouncedButton.h"
 #include "measurement/CalibrationSettings.h"
+#include "mqtt/MqttPublisher.h"
 #include "ota/FirmwareUpdateService.h"
 #include "sensors/Ina228Sensor.h"
 #include "telemetry/TelemetryStore.h"
@@ -29,6 +30,7 @@ private:
     void updateMeasurement(uint32_t nowMs);
     void updateDisplay(uint32_t nowMs);
     void updateBle(uint32_t nowMs);
+    void updateMqtt(uint32_t nowMs);
     void updateSerial(uint32_t nowMs);
     void printDiagnostics() const;
     void resetPhysicalSessionState();
@@ -45,6 +47,8 @@ private:
     BleTelemetryService ble_;
     FirmwareUpdateService firmwareUpdate_;
     WebDashboard web_;
+    MqttSettings mqttSettings_;
+    MqttPublisher mqttPublisher_;
 
     DebouncedButton resetExtremaButton_;
     DebouncedButton displayToggleButton_;

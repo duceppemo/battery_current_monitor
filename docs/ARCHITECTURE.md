@@ -18,6 +18,10 @@
                          ▼                            ▼                           ▼
                     OledDisplay              BleTelemetryService             WebDashboard
                                                                                JSON / browser
+                                                                                    │
+                                                                                    ▼
+                                                                             MqttPublisher
+                                                                          Home Assistant MQTT
 
  buttons ───────────────────────────────────────────> App (display toggle / extrema reset)
 ```
@@ -94,6 +98,24 @@ Owns the latest snapshot and extrema. It updates each statistic only with a fini
 ### Presentation and transport components
 
 `OledDisplay`, `BleTelemetryService` and `WebDashboard` consume stored state only. `WebDashboard` owns the always-on recovery SoftAP, optional home-network station association, mDNS, HTTP and JSON serialization. It also runs a push-only `WebSocketsServer` on port 81, purely for pushing the same telemetry JSON as `/api/telemetry` to connected browsers, broadcast only when at least one client is connected and gated at the measurement interval; every REST endpoint (settings, calibration, OTA) stays on the synchronous `WebServer` on port 80, untouched. The dashboard page prefers the socket and falls back to polling `/api/telemetry` if it never connects. `WifiSettings` keeps station credentials in its own NVS namespace and never exposes the password in telemetry. `BleTelemetryService` owns GATT, advertising state and the documented binary mobile-app telemetry contract. BLE control writes are queued for the application loop and return a request-ID-matched result on `control1`. Neither transport performs I2C work or retains a competing measurement cache.
+
+### `MqttSettings` and `MqttPublisher`
+
+`MqttSettings` owns one validated NVS broker profile (host, port, optional
+username/password, enabled flag), analogous to `CalibrationSettings`/
+`AlarmSettings`/`BatteryProfile`. `MqttPublisher` is the only component that
+touches `PubSubClient`: it derives a stable device ID and topic set from the
+Wi-Fi MAC address, connects (or retries every `MQTT_RECONNECT_INTERVAL_MS`),
+publishes retained Home Assistant MQTT Discovery config once per successful
+connection, and republishes a JSON state payload every
+`MQTT_PUBLISH_INTERVAL_MS`. It uses MQTT's Last Will and Testament for the
+availability topic instead of application-level heartbeats. `BatteryMonitorApp`
+calls `MqttPublisher::update()` unthrottled every loop, since `MqttPublisher`
+gates its own reconnect/publish cadence internally and `PubSubClient::loop()`
+needs frequent calls to service keepalive pings. Unlike every other settings
+type in this project, MQTT save requests are accepted only from
+`WebDashboard`; there is intentionally no BLE control for it, since it is
+meaningless without the home Wi-Fi station already connected.
 
 ### `FirmwareUpdateService`
 

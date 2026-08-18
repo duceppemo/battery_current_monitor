@@ -30,6 +30,7 @@ TelemetryStore  <---- physical session reset button (min/max + Ah/Wh)
   +--> OledDisplay <---- physical display on/off button
   +--> BleTelemetryService
   +--> WebDashboard / JSON API
+  +--> MqttPublisher (Home Assistant discovery, configured via WebDashboard)
   +--> Serial diagnostics
 ```
 
@@ -62,6 +63,8 @@ subsystems; sensor, display, BLE, web and statistics code are separated.
 - `/api/telemetry` JSON endpoint, plus a push WebSocket on port 81 broadcasting
   the same JSON so the dashboard updates without polling (falls back to
   polling if the socket never connects)
+- MQTT publishing with Home Assistant MQTT Discovery, configurable from the
+  Web Dashboard only (requires the home Wi-Fi station; not exposed over BLE)
 - Separate Web and BLE reset controls for extrema and energy
 - Device Information reporting firmware version, hardware revision and BLE capabilities
 - Local Web Dashboard firmware `.bin` upload
@@ -149,6 +152,24 @@ access, independent of the monitor's own connectivity) with a direct
 download link to the right `.bin` asset. Browsers don't allow a page to
 install a downloaded file automatically, so installing it is still the same
 manual "select file, then upload" step as before.
+
+### MQTT / Home Assistant
+
+The Web Dashboard has an MQTT card (host, port, optional username/password,
+enable toggle) that is entirely separate from the BLE app; there is no BLE
+control for MQTT. Settings persist in NVS and require the home Wi-Fi station
+to be connected, since the recovery AP has no internet or LAN broker path.
+
+When enabled, the monitor publishes Home Assistant MQTT Discovery config
+messages (retained, under `homeassistant/...`) once per broker connection,
+creating voltage, current, power, temperature, net Ah/Wh, state of charge,
+time-to-empty, sensor-problem and alarm-active entities automatically grouped
+under one Home Assistant device. State (`batterymonitor/<device-id>/state`)
+publishes as JSON every 10 seconds, and availability
+(`batterymonitor/<device-id>/availability`) uses MQTT's Last Will and
+Testament so Home Assistant marks the device offline promptly if it loses
+power or Wi-Fi. Reconnection is retried every 15 seconds while enabled and
+not connected; the stored password is never echoed back to the dashboard.
 
 ## BLE
 

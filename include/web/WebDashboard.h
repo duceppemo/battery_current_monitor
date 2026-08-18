@@ -8,6 +8,7 @@
 #include "energy/EnergyAccumulator.h"
 #include "energy/StateOfChargeEstimator.h"
 #include "measurement/CalibrationSettings.h"
+#include "mqtt/MqttPublisher.h"
 #include "network/WifiSettings.h"
 #include "ota/FirmwareUpdateService.h"
 #include "sensors/Ina228Sensor.h"
@@ -25,7 +26,9 @@ public:
         const AlarmMonitor& alarmMonitor,
         FirmwareUpdateService& firmwareUpdate,
         const BatteryProfile& batteryProfile,
-        const StateOfChargeEstimator& stateOfCharge
+        const StateOfChargeEstimator& stateOfCharge,
+        const MqttSettings& mqttSettings,
+        MqttPublisher& mqttPublisher
     );
     void update();
     bool consumeDisplayToggleRequested();
@@ -39,6 +42,7 @@ public:
     bool consumeBatteryProfileSaveRequested(BatteryProfileSettings& settings);
     bool consumeBatterySyncRequested();
     bool consumeBatteryHistoryResetRequested();
+    bool consumeMqttSettingsSaveRequested(MqttBrokerSettings& settings);
 
     void setRuntimeStatus(
         bool bleConnected,
@@ -67,7 +71,8 @@ private:
         SaveAlarms,
         SaveBatteryProfile,
         SyncBatteryFull,
-        ResetBatteryHistory
+        ResetBatteryHistory,
+        SaveMqttSettings
     };
 
     bool buildTelemetryJson(String& json);
@@ -86,6 +91,7 @@ private:
     void handleBatterySave();
     void handleBatterySync();
     void handleBatteryHistoryReset();
+    void handleMqttSave();
     void handleFirmwareUpload();
     void handleNotFound();
     bool startAccessPoint();
@@ -128,6 +134,8 @@ private:
     FirmwareUpdateService* firmwareUpdate_ = nullptr;
     const BatteryProfile* batteryProfile_ = nullptr;
     const StateOfChargeEstimator* stateOfCharge_ = nullptr;
+    const MqttSettings* mqttSettings_ = nullptr;
+    MqttPublisher* mqttPublisher_ = nullptr;
     String telemetryJson_;
 
     bool running_ = false;
@@ -146,6 +154,7 @@ private:
     CurrentCalibration pendingCalibration_;
     DeviceAlarmSettings pendingAlarms_;
     BatteryProfileSettings pendingBatteryProfile_;
+    MqttBrokerSettings pendingMqttSettings_;
     char calibrationStatus_[48] = "unchanged";
     uint32_t successfulSamples_ = 0;
     uint32_t failedSamples_ = 0;
