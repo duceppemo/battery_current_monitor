@@ -193,6 +193,38 @@ threshold trip and latched-reconnect behavior are confirmed against a real
 discharging battery (not just the bench USB rail), and the test buttons are
 confirmed against the physical wiring.
 
+## Phase 10 — Push notifications (ntfy)
+
+1. [x] Add an opt-in `NtfySettings`/`NtfyNotifier` pair, following the same
+   Settings/Monitor pattern as MQTT: a POST to an ntfy.sh (or self-hosted
+   ntfy) topic on the rising edge of each alarm condition, with a
+   human-readable title/message per alarm type rather than a single generic
+   "alarm active" flag. Web Dashboard only, no BLE surface -- it needs the
+   home Wi-Fi station with real internet access regardless, same reasoning
+   as MQTT.
+2. [x] Only HTTPS servers are supported, with certificate validation
+   disabled (`WiFiClientSecure::setInsecure()`) rather than a full CA
+   bundle: `HTTPClient`+`WiFiClientSecure` alone cost ~146 KB flash (83% ->
+   91% of the OTA partition on a 4 MB board), and a certificate bundle would
+   add meaningfully more on top of that. Accepted trade-off, confirmed with
+   Marco before implementing: a network attacker could theoretically spoof
+   or read a low-sensitivity "battery alarm" push, but that's a low
+   real-world risk for what it buys back in flash headroom.
+3. [x] Each notification is a blocking HTTPS POST bounded by
+   `Config::NTFY_HTTP_TIMEOUT_MS`, not deferred to the main loop the way OTA
+   signature verification is. This is a deliberately different call than
+   the BLE-callback case: it only runs on an alarm's rising edge (rare), not
+   every loop, and it isn't running inside a small-stack BLE task, so an
+   occasional bounded stall is an accepted trade-off rather than a crash
+   risk.
+
+**Verified end-to-end** against the real ntfy.sh service (not just a unit
+test): configured a topic via the Web Dashboard, forced a low-voltage alarm
+to trip by setting its threshold above the live reading, and confirmed the
+push notification's title/message arrived on ntfy.sh. Confirmed it does not
+repeat while the alarm stays active (edge-triggered), and fires again on a
+fresh rising edge after clearing and re-tripping.
+
 ## Non-goals until earlier phases pass
 
 - Persisting energy counters before their accuracy and reset semantics are proven.

@@ -6,7 +6,7 @@ namespace Config
 {
     // Keep the release version in one place. The preprocessor string literal is
     // also embedded in OTA images for the dashboard's selected-file check.
-#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.16"
+#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.17"
     constexpr char FIRMWARE_VERSION[] = BATTERY_MONITOR_FIRMWARE_VERSION;
     // Deliberately retained in the application image so the Web Dashboard can
     // identify a selected OTA .bin before it is written to the inactive slot.
@@ -71,6 +71,12 @@ namespace Config
     // live dashboard, so a slower interval keeps broker/network load low.
     constexpr uint32_t MQTT_RECONNECT_INTERVAL_MS = 15000;
     constexpr uint32_t MQTT_PUBLISH_INTERVAL_MS = 10000;
+
+    // ntfy push notifications are entirely optional; a POST only happens on
+    // an alarm's rising edge (see NtfyNotifier), so this timeout only bounds
+    // the rare, occasional stall it causes across BLE/Web servicing, not
+    // steady-state loop timing.
+    constexpr uint16_t NTFY_HTTP_TIMEOUT_MS = 4000;
 
     // Load-protection relay control output, e.g. an InkBird SSR-25 DA. The
     // SSR's DC control input wants 3-32 V; a bare 3.3 V GPIO is at the low

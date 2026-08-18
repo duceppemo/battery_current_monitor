@@ -11,6 +11,7 @@
 #include "input/DebouncedButton.h"
 #include "measurement/CalibrationSettings.h"
 #include "mqtt/MqttPublisher.h"
+#include "notify/NtfyNotifier.h"
 #include "ota/FirmwareUpdateService.h"
 #include "protection/LoadProtection.h"
 #include "sensors/Ina228Sensor.h"
@@ -32,6 +33,7 @@ private:
     void updateDisplay(uint32_t nowMs);
     void updateBle(uint32_t nowMs);
     void updateMqtt(uint32_t nowMs);
+    void updateNtfy(uint32_t nowMs);
     void updateSerial(uint32_t nowMs);
     void printDiagnostics() const;
     void resetPhysicalSessionState();
@@ -50,6 +52,8 @@ private:
     WebDashboard web_;
     MqttSettings mqttSettings_;
     MqttPublisher mqttPublisher_;
+    NtfySettings ntfySettings_;
+    NtfyNotifier ntfyNotifier_;
     LoadProtectionSettings loadProtectionSettings_;
     LoadProtectionMonitor loadProtectionMonitor_;
     EnergyPersistenceSettings energyPersistenceSettings_;

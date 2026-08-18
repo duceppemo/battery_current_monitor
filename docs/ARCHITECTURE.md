@@ -143,6 +143,26 @@ type in this project, MQTT save requests are accepted only from
 `WebDashboard`; there is intentionally no BLE control for it, since it is
 meaningless without the home Wi-Fi station already connected.
 
+### `NtfySettings` and `NtfyNotifier`
+
+`NtfySettings` owns one validated NVS profile (server URL, topic, enabled
+flag), the same shape and reasoning as `MqttSettings`: Web Dashboard only, no
+BLE control, meaningless without the home Wi-Fi station and real internet
+access. `NtfyNotifier` is edge-triggered off `AlarmMonitor::state()`, not
+interval-gated -- it tracks the previously-seen `activeFlags` bitmask and
+POSTs a push notification (via `HTTPClient`/`WiFiClientSecure`, certificate
+validation intentionally disabled) only for bits that just transitioned from
+clear to active, with a human-readable message specific to that alarm type
+built from the live `Telemetry` and `DeviceAlarmSettings` thresholds. This
+keeps it silent while a condition remains continuously active and fires
+again on a fresh rising edge after it clears. Unlike OTA signature
+verification, this blocking HTTPS call is *not* deferred off the calling
+task: it only runs on a rare alarm transition rather than every loop, and it
+runs from the main application task (ample stack), not the BLE controller
+task, so a bounded stall (`Config::NTFY_HTTP_TIMEOUT_MS`) is an accepted
+trade-off rather than the crash risk that motivated deferring OTA
+verification.
+
 ### `LoadProtectionSettings` and `LoadProtectionMonitor`
 
 `LoadProtectionSettings` owns one validated NVS profile (enabled flag, low

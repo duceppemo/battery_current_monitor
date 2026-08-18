@@ -10,6 +10,7 @@
 #include "measurement/CalibrationSettings.h"
 #include "mqtt/MqttPublisher.h"
 #include "network/WifiSettings.h"
+#include "notify/NtfyNotifier.h"
 #include "ota/FirmwareUpdateService.h"
 #include "protection/LoadProtection.h"
 #include "sensors/Ina228Sensor.h"
@@ -32,7 +33,8 @@ public:
         MqttPublisher& mqttPublisher,
         const LoadProtectionSettings& loadProtectionSettings,
         LoadProtectionMonitor& loadProtectionMonitor,
-        const EnergyPersistenceSettings& energyPersistenceSettings
+        const EnergyPersistenceSettings& energyPersistenceSettings,
+        const NtfySettings& ntfySettings
     );
     void update();
     bool consumeDisplayToggleRequested();
@@ -47,6 +49,7 @@ public:
     bool consumeBatterySyncRequested();
     bool consumeBatteryHistoryResetRequested();
     bool consumeMqttSettingsSaveRequested(MqttBrokerSettings& settings);
+    bool consumeNtfySettingsSaveRequested(NtfyConfig& settings);
     bool consumeLoadProtectionSaveRequested(LoadProtectionConfig& settings);
     bool consumeLoadProtectionReconnectRequested();
     bool consumeLoadProtectionTestDisconnectRequested();
@@ -82,6 +85,7 @@ private:
         SyncBatteryFull,
         ResetBatteryHistory,
         SaveMqttSettings,
+        SaveNtfySettings,
         SaveLoadProtection,
         ReconnectLoad,
         TestDisconnectLoad,
@@ -106,6 +110,7 @@ private:
     void handleBatterySync();
     void handleBatteryHistoryReset();
     void handleMqttSave();
+    void handleNtfySave();
     void handleLoadProtectionSave();
     void handleLoadProtectionReconnect();
     void handleLoadProtectionTestDisconnect();
@@ -155,6 +160,7 @@ private:
     const StateOfChargeEstimator* stateOfCharge_ = nullptr;
     const MqttSettings* mqttSettings_ = nullptr;
     MqttPublisher* mqttPublisher_ = nullptr;
+    const NtfySettings* ntfySettings_ = nullptr;
     const LoadProtectionSettings* loadProtectionSettings_ = nullptr;
     LoadProtectionMonitor* loadProtectionMonitor_ = nullptr;
     const EnergyPersistenceSettings* energyPersistenceSettings_ = nullptr;
@@ -177,6 +183,7 @@ private:
     DeviceAlarmSettings pendingAlarms_;
     BatteryProfileSettings pendingBatteryProfile_;
     MqttBrokerSettings pendingMqttSettings_;
+    NtfyConfig pendingNtfySettings_;
     LoadProtectionConfig pendingLoadProtection_;
     EnergyPersistenceConfig pendingEnergyPersistence_;
     char calibrationStatus_[48] = "unchanged";

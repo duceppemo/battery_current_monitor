@@ -167,6 +167,7 @@ void BatteryMonitorApp::begin()
     batteryProfile_.begin();
     stateOfCharge_.begin();
     mqttSettings_.begin();
+    ntfySettings_.begin();
     loadProtectionSettings_.begin();
     loadProtectionMonitor_.begin();
     energyPersistenceSettings_.begin();
@@ -201,7 +202,7 @@ void BatteryMonitorApp::begin()
     web_.begin(
         telemetry_, energy_.totals(), sensor_, calibration_, alarms_, alarmMonitor_,
         firmwareUpdate_, batteryProfile_, stateOfCharge_, mqttSettings_, mqttPublisher_,
-        loadProtectionSettings_, loadProtectionMonitor_, energyPersistenceSettings_
+        loadProtectionSettings_, loadProtectionMonitor_, energyPersistenceSettings_, ntfySettings_
     );
     bootCheckpoint = 8;
     web_.setCalibrationStatus(
@@ -444,6 +445,15 @@ void BatteryMonitorApp::updateButtons(uint32_t nowMs)
             logRuntimeEvent("MQTT settings saved from web UI.");
         } else {
             logRuntimeEvent("MQTT settings save from web UI failed.");
+        }
+    }
+
+    NtfyConfig requestedNtfy;
+    if (web_.consumeNtfySettingsSaveRequested(requestedNtfy)) {
+        if (ntfySettings_.save(requestedNtfy)) {
+            logRuntimeEvent("ntfy settings saved from web UI.");
+        } else {
+            logRuntimeEvent("ntfy settings save from web UI failed.");
         }
     }
 
@@ -728,6 +738,19 @@ void BatteryMonitorApp::updateMqtt(uint32_t nowMs)
     );
 }
 
+void BatteryMonitorApp::updateNtfy(uint32_t /*nowMs*/)
+{
+    // Purely edge-triggered by alarm state, not interval-gated -- see
+    // NtfyNotifier's header comment for why an occasional blocking POST here
+    // is an accepted trade-off rather than deferred like OTA verification.
+    ntfyNotifier_.update(
+        ntfySettings_.current(),
+        telemetry_.current(),
+        alarms_.current(),
+        alarmMonitor_.state()
+    );
+}
+
 void BatteryMonitorApp::updateSerial(uint32_t nowMs)
 {
     if ((nowMs - lastSerialMs_) < Config::SERIAL_INTERVAL_MS) {
@@ -807,6 +830,7 @@ void BatteryMonitorApp::update()
     web_.update();
     ble_.maintain();
     updateMqtt(now);
+    updateNtfy(now);
 
     delay(2);
 }

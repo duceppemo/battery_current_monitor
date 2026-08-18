@@ -73,6 +73,22 @@ namespace
         return MqttSettings::isValid(settings);
     }
 
+    bool parseNtfySettings(WebServer& server, NtfyConfig& settings)
+    {
+        if (!server.hasArg("server") || !server.hasArg("topic")) return false;
+        const String serverUrl = server.arg("server");
+        const String topic = server.arg("topic");
+        if (serverUrl.length() >= sizeof(settings.server) ||
+            topic.length() >= sizeof(settings.topic)) {
+            return false;
+        }
+
+        settings.enabled = server.hasArg("enabled") && server.arg("enabled") == "1";
+        snprintf(settings.server, sizeof(settings.server), "%s", serverUrl.c_str());
+        snprintf(settings.topic, sizeof(settings.topic), "%s", topic.c_str());
+        return NtfySettings::isValid(settings);
+    }
+
     bool parseLoadProtectionSettings(WebServer& server, LoadProtectionConfig& settings)
     {
         if (!parseFiniteFloat(server, "lowVoltage", settings.lowVoltageThreshold) ||
@@ -103,7 +119,8 @@ void WebDashboard::begin(
     MqttPublisher& mqttPublisher,
     const LoadProtectionSettings& loadProtectionSettings,
     LoadProtectionMonitor& loadProtectionMonitor,
-    const EnergyPersistenceSettings& energyPersistenceSettings)
+    const EnergyPersistenceSettings& energyPersistenceSettings,
+    const NtfySettings& ntfySettings)
 {
     store_ = &store;
     energyTotals_ = &energyTotals;
@@ -119,6 +136,7 @@ void WebDashboard::begin(
     loadProtectionSettings_ = &loadProtectionSettings;
     loadProtectionMonitor_ = &loadProtectionMonitor;
     energyPersistenceSettings_ = &energyPersistenceSettings;
+    ntfySettings_ = &ntfySettings;
     telemetryJson_.reserve(1400);
 
     WiFi.persistent(false);
@@ -140,6 +158,7 @@ void WebDashboard::begin(
     server_.on("/api/battery/sync", HTTP_POST, [this]() { handleBatterySync(); });
     server_.on("/api/battery/reset-history", HTTP_POST, [this]() { handleBatteryHistoryReset(); });
     server_.on("/api/mqtt/save", HTTP_POST, [this]() { handleMqttSave(); });
+    server_.on("/api/ntfy/save", HTTP_POST, [this]() { handleNtfySave(); });
     server_.on("/api/protection/save", HTTP_POST, [this]() { handleLoadProtectionSave(); });
     server_.on("/api/protection/reconnect", HTTP_POST, [this]() { handleLoadProtectionReconnect(); });
     server_.on("/api/protection/test-disconnect", HTTP_POST, [this]() { handleLoadProtectionTestDisconnect(); });
@@ -284,6 +303,13 @@ bool WebDashboard::consumeMqttSettingsSaveRequested(MqttBrokerSettings& settings
 {
     if (!consumeCommand(PendingCommand::SaveMqttSettings)) return false;
     settings = pendingMqttSettings_;
+    return true;
+}
+
+bool WebDashboard::consumeNtfySettingsSaveRequested(NtfyConfig& settings)
+{
+    if (!consumeCommand(PendingCommand::SaveNtfySettings)) return false;
+    settings = pendingNtfySettings_;
     return true;
 }
 
@@ -515,7 +541,7 @@ bool WebDashboard::buildTelemetryJson(String& json)
         batteryProfile_ == nullptr || stateOfCharge_ == nullptr ||
         mqttSettings_ == nullptr || mqttPublisher_ == nullptr ||
         loadProtectionSettings_ == nullptr || loadProtectionMonitor_ == nullptr ||
-        energyPersistenceSettings_ == nullptr) {
+        energyPersistenceSettings_ == nullptr || ntfySettings_ == nullptr) {
         return false;
     }
 
@@ -588,6 +614,15 @@ bool WebDashboard::buildTelemetryJson(String& json)
     appendUnsigned(json, mqtt.port);
     json += ",\"username\":";
     appendJsonString(json, mqtt.username);
+    json += "}";
+
+    const NtfyConfig& ntfy = ntfySettings_->current();
+    json += ",\"ntfy\":{\"enabled\":";
+    json += ntfy.enabled ? "true" : "false";
+    json += ",\"server\":";
+    appendJsonString(json, ntfy.server);
+    json += ",\"topic\":";
+    appendJsonString(json, ntfy.topic);
     json += "}";
 
     const LoadProtectionConfig& protection = loadProtectionSettings_->current();
@@ -840,6 +875,17 @@ void WebDashboard::handleMqttSave()
         return;
     }
     pendingMqttSettings_ = requested;
+    server_.send(202, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handleNtfySave()
+{
+    NtfyConfig requested;
+    if (!parseNtfySettings(server_, requested) || !queueCommand(PendingCommand::SaveNtfySettings)) {
+        server_.send(400, "application/json", "{\"error\":\"invalid ntfy settings\"}");
+        return;
+    }
+    pendingNtfySettings_ = requested;
     server_.send(202, "application/json", "{\"ok\":true}");
 }
 
