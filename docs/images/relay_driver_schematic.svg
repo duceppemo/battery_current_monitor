@@ -10,17 +10,6 @@
     --accent: #b8672e;
     --border-strong: #b9c0bd;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --surface: #161e23;
-      --surface-2: #131a1e;
-      --ink: #e3e9eb;
-      --ink-muted: #8b9aa2;
-      --ink-faint: #5c6b72;
-      --accent: #e0975a;
-      --border-strong: #3b464d;
-    }
-  }
   text { font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, "Liberation Mono", monospace; }
   .bgcard { fill: var(--surface); stroke: var(--border-strong); stroke-width: 2; }
   .wire { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
