@@ -35,10 +35,6 @@ Measurement, BLE and Wi-Fi continue operating while the OLED is off.
 
 ## Load-protection relay (optional)
 
-```text
-GPIO5 / D3 ---- driver stage ---- SSR control input   e.g. InkBird SSR-25 DA
-```
-
 `GPIO5` (XIAO `D3`) drives the load-protection relay/SSR, HIGH for load
 connected and LOW for disconnected. A bare 3.3 V GPIO is at the low end of a
 typical SSR's 3-32 V DC control range, so drive it through an NPN/MOSFET
@@ -50,6 +46,50 @@ separate 5-12 V supply for the SSR's control side — it does not need to be
 3.3 V. This output only does anything once load protection is explicitly
 enabled from the Web Dashboard or BLE app; see
 [WEB_DASHBOARD.md](WEB_DASHBOARD.md#load-protection-optional).
+
+### Driver stage diagram
+
+```mermaid
+flowchart LR
+    subgraph MCU["XIAO ESP32-C3 — 3.3V logic"]
+        GPIO["GPIO5 / D3"]
+    end
+
+    subgraph DRIVER["NPN driver stage"]
+        R1["R1<br/>1kΩ"]
+        BASE(("base node"))
+        PD["R2<br/>10kΩ pulldown"]
+        Q1{{"Q1 NPN<br/>PN2222 / 2N2222 / BC547 / S8050"}}
+    end
+
+    subgraph SSRLOOP["SSR control loop — 5-12V, separate supply"]
+        VCC["+5-12V"]
+        SSR["SSR control input<br/>e.g. InkBird SSR-25 DA"]
+    end
+
+    GND(("common GND"))
+
+    GPIO --> R1 --> BASE
+    BASE --> PD --> GND
+    BASE -->|base| Q1
+    Q1 -->|emitter| GND
+    VCC --> SSR --> Q1
+    Q1 -->|collector sinks control current| GND
+
+    classDef mcu fill:#1b2a3d,stroke:#53c8ff,color:#eef4fa,stroke-width:2px;
+    classDef drv fill:#2a1f14,stroke:#e0a458,color:#eef4fa;
+    classDef pwr fill:#182a1f,stroke:#4caf7d,color:#eef4fa;
+    classDef gnd fill:#16202c,stroke:#3d5771,color:#eef4fa;
+
+    class GPIO mcu;
+    class R1,BASE,PD,Q1 drv;
+    class VCC,SSR pwr;
+    class GND gnd;
+```
+
+This is a topology sketch (connection order, not a drawn schematic with real
+component footprints); a full hardware BOM and physical wiring diagram
+covering every subsystem is planned as a follow-up.
 
 Pins are centralized in `include/AppConfig.h` and can be changed there.
 
