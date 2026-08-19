@@ -18,27 +18,57 @@ BLE only after reading the monitor firmware version.
 
 ## Current architecture
 
-```text
-INA228
-  |
-  v
-Ina228Sensor
-  |
-  v
-TelemetryStore  <---- physical session reset button (min/max + Ah/Wh)
-  |
-  +--> OledDisplay <---- physical display on/off button
-  +--> BleTelemetryService
-  +--> WebDashboard / JSON API
-  +--> MqttPublisher (Home Assistant discovery, configured via WebDashboard)
-  +--> LoadProtectionMonitor (relay/SSR, configured via WebDashboard)
-  +--> Serial diagnostics
+```mermaid
+flowchart LR
+    INA228["INA228<br/>current / voltage sensor"] --> Sensor["Ina228Sensor"]
+    Sensor --> Store[["TelemetryStore"]]
+
+    ResetBtn(("Reset<br/>button")) -. reset session .-> Store
+    DispBtn(("Display<br/>button")) -. on/off, page .-> OLED
+
+    Store --> OLED["OledDisplay"]
+    Store --> BLE["BleTelemetryService"]
+    Store --> Web["WebDashboard<br/>REST + WebSocket"]
+    Store --> MQTT["MqttPublisher"]
+    Store --> Relay["LoadProtectionMonitor"]
+    Store --> Serial["Serial diagnostics"]
+
+    Web -. configures .-> MQTT
+    Web -. configures .-> Relay
+    MQTT --> HA["Home Assistant<br/>MQTT discovery"]
+    Relay --> SSR[["Relay / SSR<br/>load disconnect"]]
+
+    classDef hw fill:#243447,stroke:#5aa9e6,color:#eef4fa;
+    classDef core fill:#1b2a3d,stroke:#53c8ff,color:#eef4fa,stroke-width:2px;
+    classDef consumer fill:#16202c,stroke:#3d5771,color:#eef4fa;
+    classDef control fill:#2a1f14,stroke:#e0a458,color:#eef4fa;
+    classDef external fill:#182a1f,stroke:#4caf7d,color:#eef4fa;
+
+    class INA228 hw;
+    class SSR hw;
+    class Sensor,Store core;
+    class OLED,BLE,Web,MQTT,Relay,Serial consumer;
+    class ResetBtn,DispBtn control;
+    class HA external;
 ```
 
-`src/main.cpp` is intentionally tiny. `BatteryMonitorApp` coordinates the
-subsystems; sensor, display, BLE, web and statistics code are separated. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design rules and component
-responsibilities.
+`src/main.cpp` is intentionally tiny; `BatteryMonitorApp` owns this wiring and
+polls every subsystem from one loop. Dashed arrows are configuration paths
+(a physical button, or a setting saved from the Web Dashboard); solid arrows
+are the telemetry flow. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for
+the full component breakdown, including the Settings/Monitor pattern each
+consumer here follows.
+
+### OLED display
+
+The two pages the physical button cycles between (recreated here for
+documentation — not a photo of the actual display):
+
+![OLED live and extrema pages](docs/images/oled_pages.png)
+
+### Web Dashboard
+
+![Web Dashboard](docs/images/web_dashboard.png)
 
 ## Implemented features
 

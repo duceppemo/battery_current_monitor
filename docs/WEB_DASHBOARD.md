@@ -1,5 +1,7 @@
 # Web Dashboard
 
+![Web Dashboard](images/web_dashboard.png)
+
 ## Wi-Fi
 
 Default access point:
