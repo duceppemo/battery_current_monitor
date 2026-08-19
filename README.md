@@ -18,7 +18,7 @@ BLE only after reading the monitor firmware version.
 
 ## Current architecture
 
-![System architecture: the INA228 feeds Ina228Sensor into the TelemetryStore hub, which fans out over a telemetry bus to OledDisplay, BleTelemetryService, WebDashboard, MqttPublisher, LoadProtectionMonitor and Serial diagnostics; two physical buttons and the Web Dashboard drive dashed configuration paths; MqttPublisher reaches Home Assistant and LoadProtectionMonitor drives the Relay/SSR](docs/images/architecture_schematic.png)
+![System architecture: the INA228 feeds Ina228Sensor into the TelemetryStore hub, which fans out over a telemetry bus to OledDisplay, BleTelemetryService, WebDashboard, MqttPublisher, LoadProtectionMonitor and Serial diagnostics; two physical buttons and the Web Dashboard drive dashed configuration paths; MqttPublisher reaches Home Assistant and LoadProtectionMonitor drives the Relay/SSR](docs/images/architecture_schematic.svg)
 
 `src/main.cpp` is intentionally tiny; `BatteryMonitorApp` owns this wiring and
 polls every subsystem from one loop. Dashed lines are configuration paths (a

@@ -1,0 +1,127 @@
+<svg viewBox="0 0 920 470" xmlns="http://www.w3.org/2000/svg" role="img"
+  aria-label="Schematic: GPIO5 through a 1k base resistor to a PN2222 transistor base, transistor emitter to common ground through a 10k pulldown, collector to the SSR control minus terminal, an external 5 to 12 volt supply feeding the SSR control plus terminal and common ground">
+<style>
+  :root {
+    --surface: #ffffff;
+    --surface-2: #f8f9f8;
+    --ink: #16222c;
+    --ink-muted: #57676f;
+    --ink-faint: #8a969b;
+    --accent: #b8672e;
+    --border-strong: #b9c0bd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #161e23;
+      --surface-2: #131a1e;
+      --ink: #e3e9eb;
+      --ink-muted: #8b9aa2;
+      --ink-faint: #5c6b72;
+      --accent: #e0975a;
+      --border-strong: #3b464d;
+    }
+  }
+  text { font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, "Liberation Mono", monospace; }
+  .bgcard { fill: var(--surface); stroke: var(--border-strong); stroke-width: 2; }
+  .wire { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .wire-signal { fill: none; stroke: var(--accent); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+  .wire-dashed { fill: none; stroke: var(--ink-faint); stroke-width: 1.6; stroke-dasharray: 4 4; stroke-linecap: round; }
+  .outline { fill: var(--surface); stroke: var(--ink); stroke-width: 1.6; }
+  .outline-soft { fill: var(--surface-2); stroke: var(--border-strong); stroke-width: 1.4; }
+  .dot { fill: var(--ink); }
+  .arrow { fill: var(--ink); }
+  .lbl { fill: var(--ink); font-size: 13px; }
+  .lbl-b { fill: var(--ink); font-size: 13px; font-weight: 700; }
+  .lbl-muted { fill: var(--ink-muted); font-size: 11px; }
+  .lbl-title { fill: var(--ink); font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+</style>
+
+<rect class="bgcard" x="2" y="2" width="916" height="466" rx="4"></rect>
+
+<!-- ESP32 module -->
+<rect class="outline" x="20" y="110" width="160" height="110" rx="3"></rect>
+<text class="lbl-title" x="100" y="158" text-anchor="middle">XIAO</text>
+<text class="lbl-title" x="100" y="176" text-anchor="middle">ESP32-C3</text>
+<text class="lbl-muted" x="100" y="196" text-anchor="middle">GPIO5 / D3 &#183; GND</text>
+
+<!-- GPIO5 signal path -->
+<path class="wire-signal" d="M180,150 H230"></path>
+<text class="lbl" x="184" y="138" fill="var(--accent)" font-size="11" font-weight="600">GPIO5 HIGH = SSR ON</text>
+
+<!-- R1 -->
+<rect class="outline" x="230" y="142" width="50" height="16"></rect>
+<text class="lbl-b" x="255" y="130" text-anchor="middle">R1</text>
+<text class="lbl-muted" x="255" y="168" text-anchor="middle">1 k&#8486;</text>
+<path class="wire-signal" d="M280,150 H330"></path>
+
+<!-- Node A -->
+<circle class="dot" cx="330" cy="150" r="3.2"></circle>
+<path class="wire" d="M330,150 V190"></path>
+
+<!-- R2 pulldown -->
+<rect class="outline" x="322" y="190" width="16" height="50"></rect>
+<text class="lbl-b" x="346" y="209" text-anchor="start">R2</text>
+<text class="lbl-muted" x="346" y="225" text-anchor="start">10 k&#8486;</text>
+<text class="lbl-muted" x="346" y="240" text-anchor="start">pulldown</text>
+<path class="wire" d="M330,240 V400"></path>
+<circle class="dot" cx="330" cy="400" r="3.2"></circle>
+
+<!-- Base wire into transistor -->
+<path class="wire-signal" d="M330,150 H364"></path>
+
+<!-- Q1 transistor -->
+<circle class="outline-soft" cx="400" cy="150" r="36"></circle>
+<path class="wire-signal" d="M364,150 H388"></path>
+<path class="wire" d="M388,132 V168"></path>
+<path class="wire" d="M388,136 L412,122"></path>
+<path class="wire" d="M412,122 V70"></path>
+<path class="wire" d="M412,70 H520"></path>
+<path class="wire" d="M388,164 L412,178"></path>
+<polygon class="arrow" points="412,178 400,174 405,184"></polygon>
+<path class="wire" d="M412,178 V400"></path>
+<circle class="dot" cx="412" cy="400" r="3.2"></circle>
+
+<text class="lbl-b" x="400" y="106" text-anchor="middle">Q1 &#183; PN2222</text>
+<text class="lbl" x="368" y="142" text-anchor="end">B</text>
+<text class="lbl" x="420" y="112" text-anchor="start">C</text>
+<text class="lbl" x="420" y="196" text-anchor="start">E</text>
+
+<!-- SSR module -->
+<rect class="outline" x="520" y="40" width="200" height="140" rx="3"></rect>
+<text class="lbl-title" x="620" y="88" text-anchor="middle">SSR-25 DA</text>
+<text class="lbl-muted" x="620" y="106" text-anchor="middle">control input, 3&#8211;32 V DC</text>
+<text class="lbl-muted" x="620" y="150" text-anchor="middle">InkBird</text>
+<text class="lbl-b" x="512" y="66" text-anchor="end">IN&#8722;</text>
+<text class="lbl-b" x="512" y="114" text-anchor="end">IN+</text>
+<path class="wire" d="M520,110 H480"></path>
+
+<!-- Load side, out of scope -->
+<path class="wire-dashed" d="M720,70 H780"></path>
+<path class="wire-dashed" d="M720,110 H780"></path>
+<text class="lbl-muted" x="788" y="74">to load</text>
+<text class="lbl-muted" x="788" y="90">(not shown &#8212;</text>
+<text class="lbl-muted" x="788" y="106">check ratings</text>
+<text class="lbl-muted" x="788" y="122">&amp; fusing)</text>
+
+<!-- DC supply -->
+<rect class="outline" x="400" y="260" width="160" height="70" rx="3"></rect>
+<text class="lbl-title" x="480" y="292" text-anchor="middle">DC SUPPLY</text>
+<text class="lbl-muted" x="480" y="310" text-anchor="middle">5&#8211;12 V, control side only</text>
+<path class="wire" d="M480,260 V110"></path>
+<text class="lbl" x="466" y="264" text-anchor="end">+</text>
+<path class="wire" d="M480,330 V400"></path>
+<circle class="dot" cx="480" cy="400" r="3.2"></circle>
+<text class="lbl" x="466" y="326" text-anchor="end">&#8722;</text>
+
+<!-- ESP32 GND drop -->
+<path class="wire" d="M60,220 V400"></path>
+<circle class="dot" cx="60" cy="400" r="3.2"></circle>
+
+<!-- Ground bus -->
+<path class="wire" d="M60,400 H480"></path>
+<path class="wire" d="M200,400 V416"></path>
+<line class="wire" x1="184" y1="416" x2="216" y2="416"></line>
+<line class="wire" x1="190" y1="421" x2="210" y2="421"></line>
+<line class="wire" x1="196" y1="426" x2="204" y2="426"></line>
+<text class="lbl-muted" x="200" y="442" text-anchor="middle">COMMON GROUND</text>
+</svg>

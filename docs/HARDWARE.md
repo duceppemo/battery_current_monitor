@@ -49,7 +49,7 @@ enabled from the Web Dashboard or BLE app; see
 
 ### Driver stage diagram
 
-![PN2222 SSR driver schematic: GPIO5 through a 1k base resistor to the transistor base, a 10k pulldown to ground, emitter to common ground, collector completing the SSR control loop, with a separate 5-12V supply feeding the SSR control input](images/relay_driver_schematic.png)
+![PN2222 SSR driver schematic: GPIO5 through a 1k base resistor to the transistor base, a 10k pulldown to ground, emitter to common ground, collector completing the SSR control loop, with a separate 5-12V supply feeding the SSR control input](images/relay_driver_schematic.svg)
 
 This is a labeled schematic sketch (connection order and component values,
 not real footprints/PCB layout); a full hardware BOM and physical wiring
