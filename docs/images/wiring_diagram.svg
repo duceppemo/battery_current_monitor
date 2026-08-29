@@ -47,7 +47,7 @@
 <!-- shunt bottom-edge taps (each on its own y so none of these run coincident) -->
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M450,345 V360 H60 V870"></path>
 <circle fill="#16222c" cx="450" cy="345" r="3.4"></circle>
-<text fill="#57676f" font-size="11" x="450" y="368" text-anchor="middle">GND tap</text>
+<text fill="#57676f" font-size="11" x="450" y="378" text-anchor="middle">GND tap</text>
 
 <path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-linecap="round" d="M510,345 V415 H390 V470"></path>
 <circle fill="#8a969b" cx="510" cy="345" r="3.4"></circle>
@@ -127,13 +127,13 @@
 <path fill="none" stroke="#3a6ea5" stroke-width="1.8" stroke-linecap="round" d="M840,500 H923"></path>
 <circle fill="#ffffff" stroke="#16222c" stroke-width="1.6" cx="950" cy="500" r="27"></circle>
 <text fill="#16222c" font-size="16" font-weight="700" x="950" y="506" text-anchor="middle">D1</text>
-<text fill="#57676f" font-size="12.5" x="965" y="545" text-anchor="start">Reset button</text>
+<text fill="#57676f" font-size="12.5" x="950" y="463" text-anchor="middle">Reset button</text>
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M950,527 V870"></path>
 
 <path fill="none" stroke="#3a6ea5" stroke-width="1.8" stroke-linecap="round" d="M840,570 H983"></path>
 <circle fill="#ffffff" stroke="#16222c" stroke-width="1.6" cx="1010" cy="570" r="27"></circle>
 <text fill="#16222c" font-size="16" font-weight="700" x="1010" y="576" text-anchor="middle">D2</text>
-<text fill="#57676f" font-size="12.5" x="1025" y="615" text-anchor="start">Display button</text>
+<text fill="#57676f" font-size="12.5" x="1010" y="533" text-anchor="middle">Display button</text>
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1010,597 V870"></path>
 
 <!-- driver stage: D3 -> R1 -> Q1 base, R2 pulldown, Q1 collector/emitter -->
@@ -170,7 +170,7 @@
 <text fill="#57676f" font-size="11" x="185" y="433" text-anchor="middle">step-down regulator</text>
 <text fill="#57676f" font-size="10.5" x="185" y="449" text-anchor="middle">battery &#8594; 5V rail</text>
 <text fill="#57676f" font-size="10.5" x="235" y="374" text-anchor="start">IN+</text>
-<text fill="#57676f" font-size="10.5" x="278" y="421" text-anchor="start">OUT+ (5V)</text>
+<text fill="#57676f" font-size="10.5" x="300" y="421" text-anchor="start">OUT+ (5V)</text>
 <text fill="#57676f" font-size="10.5" x="197" y="497" text-anchor="start">GND</text>
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M185,480 V870"></path>
 
@@ -179,7 +179,7 @@
 <path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M270,430 H630 V615 H650"></path>
 
 <!-- ground bus -->
-<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" d="M60,870 H1250"></path>
+<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" d="M60,870 H1242"></path>
 <path fill="none" stroke="#16222c" stroke-width="1.8" d="M650,870 V886"></path>
 <line stroke="#16222c" stroke-width="1.8" x1="632" y1="886" x2="668" y2="886"></line>
 <line stroke="#16222c" stroke-width="1.8" x1="639" y1="892" x2="661" y2="892"></line>
