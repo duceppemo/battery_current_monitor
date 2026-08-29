@@ -1,5 +1,5 @@
 <svg viewBox="0 0 1650 1230" width="1650" height="1230" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, 'Liberation Mono', monospace"
-  aria-label="Full wiring diagram: battery positive feeds the load-protection SSR to the load, battery negative feeds a low-side Kelvin shunt to the load, INA228 senses VBUS+ from battery positive and IN-/IN+ from the shunt sense screws, INA228 and OLED share an I2C bus with the XIAO ESP32-C3, two pushbuttons and a GPIO5 driver stage (resistor, NPN transistor) control the SSR through an isolated control loop powered by a DD8025TA step-down regulator fed from the battery, and everything shares one common ground">
+  aria-label="Full wiring diagram of a portable inline monitor with no other power input: battery positive feeds the load-protection SSR to the load, battery negative feeds a low-side Kelvin shunt to the load, a DD8025TA step-down regulator taps battery positive to make the monitor's only 5V rail, powering the XIAO ESP32-C3 (which in turn powers INA228 and OLED from its own 3V3) and the SSR's control loop through a GPIO5 driver stage, INA228 also senses VBUS+ from battery positive and IN-/IN+ from the shunt sense screws, INA228 and OLED share an I2C bus with the XIAO, two pushbuttons round out the inputs, and everything shares one common ground">
 
 <rect fill="#ffffff" stroke="#b9c0bd" stroke-width="2" x="2" y="2" width="1646" height="1226" rx="4"></rect>
 
@@ -44,30 +44,29 @@
 <text fill="#c0392b" font-size="13" font-weight="700" x="858" y="163">+</text>
 <text fill="#16222c" font-size="13" font-weight="700" x="858" y="283">&#8722;</text>
 
-<!-- shunt bottom-edge taps -->
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M450,345 V400 H260 V1080"></path>
+<!-- shunt bottom-edge taps (each on its own y so none of these run coincident) -->
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M450,345 V360 H60 V1080"></path>
 <circle fill="#16222c" cx="450" cy="345" r="3.4"></circle>
 <text fill="#57676f" font-size="11" x="450" y="368" text-anchor="middle">GND tap</text>
 
-<path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-linecap="round" d="M510,345 V410 H390 V470"></path>
+<path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-linecap="round" d="M510,345 V415 H390 V470"></path>
 <circle fill="#8a969b" cx="510" cy="345" r="3.4"></circle>
 <text fill="#57676f" font-size="11" x="510" y="368" text-anchor="middle">IN&#8722; sense</text>
 
-<path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-linecap="round" d="M600,345 V410 H450 V470"></path>
+<path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-linecap="round" d="M600,345 V425 H450 V470"></path>
 <circle fill="#8a969b" cx="600" cy="345" r="3.4"></circle>
 <text fill="#57676f" font-size="11" x="600" y="368" text-anchor="middle">IN+ sense</text>
 
 <!-- VBUS+ branch from battery+ -->
-<path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M300,170 V410 H330 V470"></path>
+<path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M300,170 V405 H330 V470"></path>
 
-<!-- battery+ tap feeding the DD8025TA step-down regulator -->
-<path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M370,170 V410 H560 V875 H1080"></path>
-<circle fill="#c0392b" cx="370" cy="170" r="4"></circle>
-<text fill="#57676f" font-size="10.5" x="378" y="300" text-anchor="start">to DD8025TA</text>
+<!-- battery+ tap feeding the DD8025TA step-down regulator (moved close by, below the battery) -->
+<path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M220,170 V380"></path>
+<circle fill="#c0392b" cx="220" cy="170" r="4"></circle>
 
-<!-- SSR control loop -->
+<!-- SSR control loop: CTRL- to Q1's collector, CTRL+ to the regulator's output -->
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M460,115 V60 H1242 V612"></path>
-<path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M590,115 V45 H1270 V850"></path>
+<path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M270,430 H290 V45 H590 V115"></path>
 
 <!-- ============ BAND 2: SENSOR / CONTROL CLUSTER ============ -->
 
@@ -119,13 +118,10 @@
 <text fill="#57676f" font-size="11" x="835" y="495" text-anchor="end">D1</text>
 <text fill="#57676f" font-size="11" x="835" y="565" text-anchor="end">D2</text>
 <text fill="#57676f" font-size="11" x="835" y="635" text-anchor="end">D3</text>
-<text fill="#57676f" font-size="11" x="835" y="705" text-anchor="end">5V IN</text>
+<text fill="#57676f" font-size="11" x="655" y="619" text-anchor="start">5V IN</text>
 <text fill="#57676f" font-size="11" x="758" y="815" text-anchor="middle">GND</text>
 
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M745,800 V1080"></path>
-
-<path fill="none" stroke="#8a969b" stroke-width="1.6" stroke-dasharray="5 5" stroke-linecap="round" d="M840,710 H900"></path>
-<text fill="#57676f" font-size="11" x="908" y="714">5V via USB-C (not shown)</text>
 
 <!-- buttons -->
 <path fill="none" stroke="#3a6ea5" stroke-width="1.8" stroke-linecap="round" d="M840,500 H923"></path>
@@ -168,15 +164,19 @@
 <text fill="#57676f" font-size="11" x="1250" y="602" text-anchor="start">C</text>
 <text fill="#57676f" font-size="11" x="1250" y="686" text-anchor="start">E</text>
 
-<!-- step-down regulator, fed from the battery -->
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="1080" y="850" width="190" height="100" rx="3"></rect>
-<text fill="#16222c" font-size="16" font-weight="700" x="1175" y="882" text-anchor="middle">DD8025TA</text>
-<text fill="#57676f" font-size="12" x="1175" y="900" text-anchor="middle">step-down regulator</text>
-<text fill="#57676f" font-size="11" x="1175" y="916" text-anchor="middle">battery &#8594; control rail</text>
-<text fill="#57676f" font-size="10.5" x="1070" y="871" text-anchor="end">IN+</text>
-<text fill="#57676f" font-size="10.5" x="1275" y="866" text-anchor="middle">OUT+</text>
-<text fill="#57676f" font-size="10.5" x="1175" y="965" text-anchor="middle">GND</text>
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1175,950 V1080"></path>
+<!-- step-down regulator, fed from the battery, right below it for short leads -->
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="100" y="380" width="170" height="100" rx="3"></rect>
+<text fill="#16222c" font-size="15" font-weight="700" x="185" y="415" text-anchor="middle">DD8025TA</text>
+<text fill="#57676f" font-size="11" x="185" y="433" text-anchor="middle">step-down regulator</text>
+<text fill="#57676f" font-size="10.5" x="185" y="449" text-anchor="middle">battery &#8594; 5V rail</text>
+<text fill="#57676f" font-size="10.5" x="235" y="374" text-anchor="start">IN+</text>
+<text fill="#57676f" font-size="10.5" x="278" y="426" text-anchor="start">OUT+ (5V)</text>
+<text fill="#57676f" font-size="10.5" x="185" y="497" text-anchor="middle">GND</text>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M185,480 V1080"></path>
+
+<!-- regulator output: powers XIAO (which in turn powers INA228/OLED off its own 3V3) and the SSR control loop -->
+<circle fill="#c0392b" cx="270" cy="430" r="3.4"></circle>
+<path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M270,430 H630 V615 H650"></path>
 
 <!-- ground bus -->
 <path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" d="M240,1080 H1250"></path>
