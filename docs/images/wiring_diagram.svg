@@ -1,7 +1,7 @@
-<svg viewBox="0 0 1650 1230" width="1650" height="1230" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, 'Liberation Mono', monospace"
+<svg viewBox="0 0 1650 1010" width="1650" height="1010" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, 'Liberation Mono', monospace"
   aria-label="Full wiring diagram of a portable inline monitor with no other power input: battery positive feeds the load-protection SSR to the load, battery negative feeds a low-side Kelvin shunt to the load, a DD8025TA step-down regulator taps battery positive to make the monitor's only 5V rail, powering the XIAO ESP32-C3 (which in turn powers INA228 and OLED from its own 3V3) and the SSR's control loop through a GPIO5 driver stage, INA228 also senses VBUS+ from battery positive and IN-/IN+ from the shunt sense screws, INA228 and OLED share an I2C bus with the XIAO, two pushbuttons round out the inputs, and everything shares one common ground">
 
-<rect fill="#ffffff" stroke="#b9c0bd" stroke-width="2" x="2" y="2" width="1646" height="1226" rx="4"></rect>
+<rect fill="#ffffff" stroke="#b9c0bd" stroke-width="2" x="2" y="2" width="1646" height="1006" rx="4"></rect>
 
 <!-- ============ BAND 1: MAIN POWER PATH ============ -->
 
@@ -21,18 +21,18 @@
 <text fill="#16222c" font-size="16.5" font-weight="700" x="525" y="150" text-anchor="middle">LOAD-PROTECTION SSR</text>
 <text fill="#57676f" font-size="12" x="525" y="168" text-anchor="middle">DC-DC, positive lead</text>
 <text fill="#57676f" font-size="11" x="525" y="184" text-anchor="middle">exact part TBD</text>
-<text fill="#57676f" font-size="10.5" x="415" y="166" text-anchor="end">HOT-IN</text>
-<text fill="#57676f" font-size="10.5" x="635" y="166" text-anchor="start">HOT-OUT</text>
-<text fill="#57676f" font-size="11" x="460" y="102" text-anchor="middle">CTRL&#8722;</text>
-<text fill="#57676f" font-size="11" x="590" y="102" text-anchor="middle">CTRL+</text>
+<text fill="#57676f" font-size="10.5" x="415" y="160" text-anchor="end">HOT-IN</text>
+<text fill="#57676f" font-size="10.5" x="635" y="160" text-anchor="start">HOT-OUT</text>
+<text fill="#57676f" font-size="11" x="450" y="100" text-anchor="end">CTRL&#8722;</text>
+<text fill="#57676f" font-size="11" x="600" y="100" text-anchor="start">CTRL+</text>
 
 <!-- SHUNT -->
 <rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="420" y="235" width="210" height="110" rx="3"></rect>
 <text fill="#16222c" font-size="17" font-weight="700" x="525" y="272" text-anchor="middle">SHUNT</text>
 <text fill="#57676f" font-size="12.5" x="525" y="292" text-anchor="middle">100A / 50mV Kelvin</text>
 <text fill="#57676f" font-size="12.5" x="525" y="308" text-anchor="middle">low-side, in (&#8722;) return</text>
-<text fill="#57676f" font-size="10.5" x="415" y="278" text-anchor="end">SOURCE</text>
-<text fill="#57676f" font-size="10.5" x="635" y="278" text-anchor="start">LOAD</text>
+<text fill="#57676f" font-size="10.5" x="415" y="272" text-anchor="end">SOURCE</text>
+<text fill="#57676f" font-size="10.5" x="635" y="272" text-anchor="start">LOAD</text>
 
 <path fill="none" stroke="#c0392b" stroke-width="3" stroke-linecap="round" d="M630,170 H850"></path>
 <path fill="none" stroke="#16222c" stroke-width="2.5" stroke-linecap="round" d="M630,290 H850"></path>
@@ -45,17 +45,17 @@
 <text fill="#16222c" font-size="13" font-weight="700" x="858" y="283">&#8722;</text>
 
 <!-- shunt bottom-edge taps (each on its own y so none of these run coincident) -->
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M450,345 V360 H60 V1080"></path>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M450,345 V360 H60 V870"></path>
 <circle fill="#16222c" cx="450" cy="345" r="3.4"></circle>
 <text fill="#57676f" font-size="11" x="450" y="368" text-anchor="middle">GND tap</text>
 
 <path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-linecap="round" d="M510,345 V415 H390 V470"></path>
 <circle fill="#8a969b" cx="510" cy="345" r="3.4"></circle>
-<text fill="#57676f" font-size="11" x="510" y="368" text-anchor="middle">IN&#8722; sense</text>
+<text fill="#57676f" font-size="11" x="522" y="368" text-anchor="start">IN&#8722; sense</text>
 
 <path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-linecap="round" d="M600,345 V425 H450 V470"></path>
 <circle fill="#8a969b" cx="600" cy="345" r="3.4"></circle>
-<text fill="#57676f" font-size="11" x="600" y="368" text-anchor="middle">IN+ sense</text>
+<text fill="#57676f" font-size="11" x="612" y="368" text-anchor="start">IN+ sense</text>
 
 <!-- VBUS+ branch from battery+ -->
 <path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M300,170 V405 H330 V470"></path>
@@ -75,22 +75,22 @@
 <text fill="#16222c" font-size="17" font-weight="700" x="385" y="580" text-anchor="middle">INA228</text>
 <text fill="#57676f" font-size="12.5" x="385" y="600" text-anchor="middle">current / voltage sensor</text>
 <text fill="#57676f" font-size="12.5" x="385" y="616" text-anchor="middle">0x40</text>
-<text fill="#57676f" font-size="10.5" x="325" y="465" text-anchor="middle">VBUS+</text>
-<text fill="#57676f" font-size="10.5" x="385" y="465" text-anchor="middle">IN&#8722;</text>
-<text fill="#57676f" font-size="10.5" x="445" y="465" text-anchor="middle">IN+</text>
-<text fill="#57676f" font-size="11" x="495" y="497">VS</text>
-<text fill="#57676f" font-size="11" x="495" y="537">GND</text>
-<text fill="#57676f" font-size="11" x="495" y="577">SDA</text>
-<text fill="#57676f" font-size="11" x="495" y="617">SCL</text>
+<text fill="#57676f" font-size="10.5" x="330" y="485" text-anchor="middle">VBUS+</text>
+<text fill="#57676f" font-size="10.5" x="390" y="485" text-anchor="middle">IN&#8722;</text>
+<text fill="#57676f" font-size="10.5" x="450" y="485" text-anchor="middle">IN+</text>
+<text fill="#57676f" font-size="11" x="495" y="493">VS</text>
+<text fill="#57676f" font-size="11" x="495" y="533">SDA</text>
+<text fill="#57676f" font-size="11" x="495" y="573">SCL</text>
+<text fill="#57676f" font-size="11" x="495" y="613">GND</text>
 
 <!-- OLED -->
 <rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="280" y="680" width="210" height="120" rx="3"></rect>
 <text fill="#16222c" font-size="17" font-weight="700" x="385" y="735" text-anchor="middle">SSD1309 OLED</text>
 <text fill="#57676f" font-size="12.5" x="385" y="755" text-anchor="middle">0x3C</text>
-<text fill="#57676f" font-size="11" x="495" y="707">VDD</text>
-<text fill="#57676f" font-size="11" x="495" y="732">GND</text>
-<text fill="#57676f" font-size="11" x="495" y="757">SDA</text>
-<text fill="#57676f" font-size="11" x="495" y="782">SCL</text>
+<text fill="#57676f" font-size="11" x="495" y="703">VDD</text>
+<text fill="#57676f" font-size="11" x="495" y="728">GND</text>
+<text fill="#57676f" font-size="11" x="495" y="753">SDA</text>
+<text fill="#57676f" font-size="11" x="495" y="778">SCL</text>
 
 <!-- INA228 <-> XIAO shared bus (3V3 / SDA / SCL), with OLED taps -->
 <path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M490,500 H650"></path>
@@ -105,36 +105,36 @@
 <circle fill="#3f7a56" cx="640" cy="580" r="3.4"></circle>
 <path fill="none" stroke="#3f7a56" stroke-width="1.8" stroke-linecap="round" d="M640,580 V785 H490"></path>
 
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M490,620 H520 V1080"></path>
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M490,735 H540 V1080"></path>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M490,620 H520 V870"></path>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M490,735 H540 V870"></path>
 
 <!-- XIAO ESP32-C3 -->
 <rect fill="#ffffff" stroke="#16222c" stroke-width="2" x="650" y="460" width="190" height="340" rx="4"></rect>
 <text fill="#16222c" font-size="18" font-weight="700" x="745" y="620" text-anchor="middle">XIAO</text>
 <text fill="#16222c" font-size="18" font-weight="700" x="745" y="642" text-anchor="middle">ESP32-C3</text>
-<text fill="#57676f" font-size="11" x="655" y="495">3V3</text>
-<text fill="#57676f" font-size="11" x="655" y="535">SDA / D4</text>
-<text fill="#57676f" font-size="11" x="655" y="575">SCL / D5</text>
-<text fill="#57676f" font-size="11" x="835" y="495" text-anchor="end">D1</text>
-<text fill="#57676f" font-size="11" x="835" y="565" text-anchor="end">D2</text>
-<text fill="#57676f" font-size="11" x="835" y="635" text-anchor="end">D3</text>
-<text fill="#57676f" font-size="11" x="655" y="619" text-anchor="start">5V IN</text>
-<text fill="#57676f" font-size="11" x="758" y="815" text-anchor="middle">GND</text>
+<text fill="#57676f" font-size="11" x="655" y="491">3V3</text>
+<text fill="#57676f" font-size="11" x="655" y="531">SDA / D4</text>
+<text fill="#57676f" font-size="11" x="655" y="571">SCL / D5</text>
+<text fill="#57676f" font-size="11" x="835" y="491" text-anchor="end">D1</text>
+<text fill="#57676f" font-size="11" x="835" y="561" text-anchor="end">D2</text>
+<text fill="#57676f" font-size="11" x="835" y="631" text-anchor="end">D3</text>
+<text fill="#57676f" font-size="11" x="655" y="626" text-anchor="start">5V IN</text>
+<text fill="#57676f" font-size="11" x="752" y="815" text-anchor="start">GND</text>
 
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M745,800 V1080"></path>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M745,800 V870"></path>
 
 <!-- buttons -->
 <path fill="none" stroke="#3a6ea5" stroke-width="1.8" stroke-linecap="round" d="M840,500 H923"></path>
 <circle fill="#ffffff" stroke="#16222c" stroke-width="1.6" cx="950" cy="500" r="27"></circle>
 <text fill="#16222c" font-size="16" font-weight="700" x="950" y="506" text-anchor="middle">D1</text>
-<text fill="#57676f" font-size="12.5" x="950" y="545" text-anchor="middle">Reset button</text>
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M950,527 V1080"></path>
+<text fill="#57676f" font-size="12.5" x="965" y="545" text-anchor="start">Reset button</text>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M950,527 V870"></path>
 
 <path fill="none" stroke="#3a6ea5" stroke-width="1.8" stroke-linecap="round" d="M840,570 H983"></path>
 <circle fill="#ffffff" stroke="#16222c" stroke-width="1.6" cx="1010" cy="570" r="27"></circle>
 <text fill="#16222c" font-size="16" font-weight="700" x="1010" y="576" text-anchor="middle">D2</text>
-<text fill="#57676f" font-size="12.5" x="1010" y="615" text-anchor="middle">Display button</text>
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1010,597 V1080"></path>
+<text fill="#57676f" font-size="12.5" x="1025" y="615" text-anchor="start">Display button</text>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1010,597 V870"></path>
 
 <!-- driver stage: D3 -> R1 -> Q1 base, R2 pulldown, Q1 collector/emitter -->
 <path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" d="M840,640 H1080"></path>
@@ -149,7 +149,7 @@
 <text fill="#16222c" font-size="12" font-weight="700" x="1176" y="678" text-anchor="start">R2</text>
 <text fill="#57676f" font-size="11" x="1176" y="693" text-anchor="start">10 k&#8486;</text>
 <text fill="#57676f" font-size="11" x="1176" y="707" text-anchor="start">pulldown</text>
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1160,710 V1080"></path>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1160,710 V870"></path>
 
 <path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" d="M1160,640 H1194"></path>
 <circle fill="#f8f9f8" stroke="#b9c0bd" stroke-width="1.4" cx="1230" cy="640" r="36"></circle>
@@ -157,9 +157,9 @@
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1218,626 L1242,612"></path>
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1218,654 L1242,668"></path>
 <polygon fill="#16222c" points="1242,668 1230,664 1235,674"></polygon>
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1242,668 V1080"></path>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1242,668 V870"></path>
 
-<text fill="#16222c" font-size="12" font-weight="700" x="1230" y="596" text-anchor="middle">Q1 &#183; PN2222</text>
+<text fill="#16222c" font-size="12" font-weight="700" x="1200" y="596" text-anchor="end">Q1 &#183; PN2222</text>
 <text fill="#57676f" font-size="11" x="1198" y="632" text-anchor="end">B</text>
 <text fill="#57676f" font-size="11" x="1250" y="602" text-anchor="start">C</text>
 <text fill="#57676f" font-size="11" x="1250" y="686" text-anchor="start">E</text>
@@ -170,36 +170,36 @@
 <text fill="#57676f" font-size="11" x="185" y="433" text-anchor="middle">step-down regulator</text>
 <text fill="#57676f" font-size="10.5" x="185" y="449" text-anchor="middle">battery &#8594; 5V rail</text>
 <text fill="#57676f" font-size="10.5" x="235" y="374" text-anchor="start">IN+</text>
-<text fill="#57676f" font-size="10.5" x="278" y="426" text-anchor="start">OUT+ (5V)</text>
-<text fill="#57676f" font-size="10.5" x="185" y="497" text-anchor="middle">GND</text>
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M185,480 V1080"></path>
+<text fill="#57676f" font-size="10.5" x="278" y="421" text-anchor="start">OUT+ (5V)</text>
+<text fill="#57676f" font-size="10.5" x="197" y="497" text-anchor="start">GND</text>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M185,480 V870"></path>
 
 <!-- regulator output: powers XIAO (which in turn powers INA228/OLED off its own 3V3) and the SSR control loop -->
 <circle fill="#c0392b" cx="270" cy="430" r="3.4"></circle>
 <path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M270,430 H630 V615 H650"></path>
 
 <!-- ground bus -->
-<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" d="M240,1080 H1250"></path>
-<path fill="none" stroke="#16222c" stroke-width="1.8" d="M650,1080 V1096"></path>
-<line stroke="#16222c" stroke-width="1.8" x1="632" y1="1096" x2="668" y2="1096"></line>
-<line stroke="#16222c" stroke-width="1.8" x1="639" y1="1102" x2="661" y2="1102"></line>
-<line stroke="#16222c" stroke-width="1.8" x1="646" y1="1108" x2="654" y2="1108"></line>
-<text fill="#57676f" font-size="13" x="650" y="1130" text-anchor="middle">COMMON GROUND</text>
-<text fill="#57676f" font-size="11" x="650" y="1148" text-anchor="middle">battery (&#8722;), all sensor/logic GND, driver stage emitter and control-supply (&#8722;) all share this net</text>
+<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" d="M60,870 H1250"></path>
+<path fill="none" stroke="#16222c" stroke-width="1.8" d="M650,870 V886"></path>
+<line stroke="#16222c" stroke-width="1.8" x1="632" y1="886" x2="668" y2="886"></line>
+<line stroke="#16222c" stroke-width="1.8" x1="639" y1="892" x2="661" y2="892"></line>
+<line stroke="#16222c" stroke-width="1.8" x1="646" y1="898" x2="654" y2="898"></line>
+<text fill="#57676f" font-size="13" x="650" y="920" text-anchor="middle">COMMON GROUND</text>
+<text fill="#57676f" font-size="11" x="650" y="938" text-anchor="middle">battery (&#8722;), all sensor/logic GND, driver stage emitter and control-supply (&#8722;) all share this net</text>
 
 <!-- legend (below the ground bus, clear of every drop wire) -->
-<line x1="30" y1="1195" x2="66" y2="1195" stroke="#c0392b" stroke-width="3"></line>
-<text fill="#57676f" font-size="13" x="76" y="1200">DC + (power)</text>
-<line x1="230" y1="1195" x2="266" y2="1195" stroke="#16222c" stroke-width="2.5"></line>
-<text fill="#57676f" font-size="13" x="276" y="1200">DC &#8722; (power/GND)</text>
-<line x1="450" y1="1195" x2="486" y2="1195" stroke="#8a969b" stroke-width="1.8"></line>
-<text fill="#57676f" font-size="13" x="496" y="1200">Kelvin sense</text>
-<line x1="640" y1="1195" x2="676" y2="1195" stroke="#c9a227" stroke-width="1.8"></line>
-<text fill="#57676f" font-size="13" x="686" y="1200">SDA</text>
-<line x1="740" y1="1195" x2="776" y2="1195" stroke="#3f7a56" stroke-width="1.8"></line>
-<text fill="#57676f" font-size="13" x="786" y="1200">SCL</text>
-<line x1="840" y1="1195" x2="876" y2="1195" stroke="#3a6ea5" stroke-width="1.8"></line>
-<text fill="#57676f" font-size="13" x="886" y="1200">button signal</text>
-<line x1="1010" y1="1195" x2="1046" y2="1195" stroke="#b8672e" stroke-width="2.25"></line>
-<text fill="#57676f" font-size="13" x="1056" y="1200">relay-control (D3)</text>
+<line x1="30" y1="975" x2="66" y2="975" stroke="#c0392b" stroke-width="3"></line>
+<text fill="#57676f" font-size="13" x="76" y="980">DC + (power)</text>
+<line x1="230" y1="975" x2="266" y2="975" stroke="#16222c" stroke-width="2.5"></line>
+<text fill="#57676f" font-size="13" x="276" y="980">DC &#8722; (power/GND)</text>
+<line x1="450" y1="975" x2="486" y2="975" stroke="#8a969b" stroke-width="1.8"></line>
+<text fill="#57676f" font-size="13" x="496" y="980">Kelvin sense</text>
+<line x1="640" y1="975" x2="676" y2="975" stroke="#c9a227" stroke-width="1.8"></line>
+<text fill="#57676f" font-size="13" x="686" y="980">SDA</text>
+<line x1="740" y1="975" x2="776" y2="975" stroke="#3f7a56" stroke-width="1.8"></line>
+<text fill="#57676f" font-size="13" x="786" y="980">SCL</text>
+<line x1="840" y1="975" x2="876" y2="975" stroke="#3a6ea5" stroke-width="1.8"></line>
+<text fill="#57676f" font-size="13" x="886" y="980">button signal</text>
+<line x1="1010" y1="975" x2="1046" y2="975" stroke="#b8672e" stroke-width="2.25"></line>
+<text fill="#57676f" font-size="13" x="1056" y="980">relay-control (D3)</text>
 </svg>
