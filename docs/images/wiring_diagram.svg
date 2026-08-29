@@ -1,7 +1,7 @@
-<svg viewBox="0 0 1650 1200" width="1650" height="1200" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, 'Liberation Mono', monospace"
-  aria-label="Full wiring diagram: battery positive feeds the load-protection SSR to the load, battery negative feeds a low-side Kelvin shunt to the load, INA228 senses VBUS+ from battery positive and IN-/IN+ from the shunt sense screws, INA228 and OLED share an I2C bus with the XIAO ESP32-C3, two pushbuttons and a GPIO5 driver stage (resistor, NPN transistor, separate 5-12V supply) control the SSR, and everything shares one common ground">
+<svg viewBox="0 0 1650 1230" width="1650" height="1230" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, 'Liberation Mono', monospace"
+  aria-label="Full wiring diagram: battery positive feeds the load-protection SSR to the load, battery negative feeds a low-side Kelvin shunt to the load, INA228 senses VBUS+ from battery positive and IN-/IN+ from the shunt sense screws, INA228 and OLED share an I2C bus with the XIAO ESP32-C3, two pushbuttons and a GPIO5 driver stage (resistor, NPN transistor) control the SSR through an isolated control loop powered by a DD8025TA step-down regulator fed from the battery, and everything shares one common ground">
 
-<rect fill="#ffffff" stroke="#b9c0bd" stroke-width="2" x="2" y="2" width="1646" height="1196" rx="4"></rect>
+<rect fill="#ffffff" stroke="#b9c0bd" stroke-width="2" x="2" y="2" width="1646" height="1226" rx="4"></rect>
 
 <!-- ============ BAND 1: MAIN POWER PATH ============ -->
 
@@ -59,6 +59,11 @@
 
 <!-- VBUS+ branch from battery+ -->
 <path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M300,170 V410 H330 V470"></path>
+
+<!-- battery+ tap feeding the DD8025TA step-down regulator -->
+<path fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round" d="M370,170 V410 H560 V875 H1080"></path>
+<circle fill="#c0392b" cx="370" cy="170" r="4"></circle>
+<text fill="#57676f" font-size="10.5" x="378" y="300" text-anchor="start">to DD8025TA</text>
 
 <!-- SSR control loop -->
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M460,115 V60 H1242 V612"></path>
@@ -142,6 +147,7 @@
 <text fill="#57676f" font-size="11" x="1105" y="666" text-anchor="middle">1 k&#8486;</text>
 <path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" d="M1130,640 H1160"></path>
 <circle fill="#16222c" cx="1160" cy="640" r="3.4"></circle>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1160,640 V660"></path>
 
 <rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="1152" y="660" width="16" height="50"></rect>
 <text fill="#16222c" font-size="12" font-weight="700" x="1176" y="678" text-anchor="start">R2</text>
@@ -162,13 +168,15 @@
 <text fill="#57676f" font-size="11" x="1250" y="602" text-anchor="start">C</text>
 <text fill="#57676f" font-size="11" x="1250" y="686" text-anchor="start">E</text>
 
-<!-- control supply -->
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="1080" y="850" width="190" height="90" rx="3"></rect>
-<text fill="#16222c" font-size="16" font-weight="700" x="1175" y="888" text-anchor="middle">5-12V SUPPLY</text>
-<text fill="#57676f" font-size="12" x="1175" y="908" text-anchor="middle">control side only</text>
-<text fill="#c0392b" font-size="13" font-weight="700" x="1275" y="866" text-anchor="middle">+</text>
-<text fill="#16222c" font-size="13" font-weight="700" x="1175" y="948" text-anchor="middle">&#8722;</text>
-<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1175,940 V1080"></path>
+<!-- step-down regulator, fed from the battery -->
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="1080" y="850" width="190" height="100" rx="3"></rect>
+<text fill="#16222c" font-size="16" font-weight="700" x="1175" y="882" text-anchor="middle">DD8025TA</text>
+<text fill="#57676f" font-size="12" x="1175" y="900" text-anchor="middle">step-down regulator</text>
+<text fill="#57676f" font-size="11" x="1175" y="916" text-anchor="middle">battery &#8594; control rail</text>
+<text fill="#57676f" font-size="10.5" x="1070" y="871" text-anchor="end">IN+</text>
+<text fill="#57676f" font-size="10.5" x="1275" y="866" text-anchor="middle">OUT+</text>
+<text fill="#57676f" font-size="10.5" x="1175" y="965" text-anchor="middle">GND</text>
+<path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1175,950 V1080"></path>
 
 <!-- ground bus -->
 <path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" d="M240,1080 H1250"></path>
@@ -179,19 +187,19 @@
 <text fill="#57676f" font-size="13" x="650" y="1130" text-anchor="middle">COMMON GROUND</text>
 <text fill="#57676f" font-size="11" x="650" y="1148" text-anchor="middle">battery (&#8722;), all sensor/logic GND, driver stage emitter and control-supply (&#8722;) all share this net</text>
 
-<!-- legend -->
-<line x1="30" y1="1000" x2="66" y2="1000" stroke="#c0392b" stroke-width="3"></line>
-<text fill="#57676f" font-size="13" x="76" y="1005">DC + (power)</text>
-<line x1="230" y1="1000" x2="266" y2="1000" stroke="#16222c" stroke-width="2.5"></line>
-<text fill="#57676f" font-size="13" x="276" y="1005">DC &#8722; (power/GND)</text>
-<line x1="450" y1="1000" x2="486" y2="1000" stroke="#8a969b" stroke-width="1.8"></line>
-<text fill="#57676f" font-size="13" x="496" y="1005">Kelvin sense</text>
-<line x1="640" y1="1000" x2="676" y2="1000" stroke="#c9a227" stroke-width="1.8"></line>
-<text fill="#57676f" font-size="13" x="686" y="1005">SDA</text>
-<line x1="740" y1="1000" x2="776" y2="1000" stroke="#3f7a56" stroke-width="1.8"></line>
-<text fill="#57676f" font-size="13" x="786" y="1005">SCL</text>
-<line x1="840" y1="1000" x2="876" y2="1000" stroke="#3a6ea5" stroke-width="1.8"></line>
-<text fill="#57676f" font-size="13" x="886" y="1005">button signal</text>
-<line x1="1010" y1="1000" x2="1046" y2="1000" stroke="#b8672e" stroke-width="2.25"></line>
-<text fill="#57676f" font-size="13" x="1056" y="1005">relay-control (D3)</text>
+<!-- legend (below the ground bus, clear of every drop wire) -->
+<line x1="30" y1="1195" x2="66" y2="1195" stroke="#c0392b" stroke-width="3"></line>
+<text fill="#57676f" font-size="13" x="76" y="1200">DC + (power)</text>
+<line x1="230" y1="1195" x2="266" y2="1195" stroke="#16222c" stroke-width="2.5"></line>
+<text fill="#57676f" font-size="13" x="276" y="1200">DC &#8722; (power/GND)</text>
+<line x1="450" y1="1195" x2="486" y2="1195" stroke="#8a969b" stroke-width="1.8"></line>
+<text fill="#57676f" font-size="13" x="496" y="1200">Kelvin sense</text>
+<line x1="640" y1="1195" x2="676" y2="1195" stroke="#c9a227" stroke-width="1.8"></line>
+<text fill="#57676f" font-size="13" x="686" y="1200">SDA</text>
+<line x1="740" y1="1195" x2="776" y2="1195" stroke="#3f7a56" stroke-width="1.8"></line>
+<text fill="#57676f" font-size="13" x="786" y="1200">SCL</text>
+<line x1="840" y1="1195" x2="876" y2="1195" stroke="#3a6ea5" stroke-width="1.8"></line>
+<text fill="#57676f" font-size="13" x="886" y="1200">button signal</text>
+<line x1="1010" y1="1195" x2="1046" y2="1195" stroke="#b8672e" stroke-width="2.25"></line>
+<text fill="#57676f" font-size="13" x="1056" y="1200">relay-control (D3)</text>
 </svg>

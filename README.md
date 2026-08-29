@@ -29,15 +29,17 @@ breakdown, including the Settings/Monitor pattern each consumer here follows.
 
 ### Wiring
 
-![Full wiring diagram: battery positive feeds the load-protection SSR to the load, battery negative feeds a low-side Kelvin shunt to the load, INA228 senses VBUS+ from battery positive and IN-/IN+ from the shunt sense screws, INA228 and OLED share an I2C bus with the XIAO ESP32-C3, two pushbuttons and a GPIO5 driver stage control the SSR, and everything shares one common ground](docs/images/wiring_diagram.svg)
+![Full wiring diagram: battery positive feeds the load-protection SSR to the load, battery negative feeds a low-side Kelvin shunt to the load, INA228 senses VBUS+ from battery positive and IN-/IN+ from the shunt sense screws, INA228 and OLED share an I2C bus with the XIAO ESP32-C3, two pushbuttons and a GPIO5 driver stage control the SSR through an isolated control loop powered by a DD8025TA step-down regulator fed from the battery, and everything shares one common ground](docs/images/wiring_diagram.svg)
 
 The shunt is low-side (in the battery/load negative return, per
 [docs/SHUNT_COMMISSIONING.md](docs/SHUNT_COMMISSIONING.md)); the
 load-protection SSR is a separate, independent break in the positive lead.
 INA228's `VBUS+` taps battery positive directly, ahead of the SSR, so
 voltage/SoC/alarms keep reading the true battery state even when the SSR has
-disconnected the load. See [docs/HARDWARE.md](docs/HARDWARE.md) for pin
-assignments, I2C addresses and the driver-stage component values.
+disconnected the load. The SSR's isolated control loop is powered by a
+DD8025TA step-down regulator, also fed from the battery. See
+[docs/HARDWARE.md](docs/HARDWARE.md) for pin assignments, I2C addresses and
+the driver-stage component values.
 
 ### OLED display
 
