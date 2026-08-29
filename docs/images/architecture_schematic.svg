@@ -1,108 +1,114 @@
-<svg viewBox="0 0 1580 660" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, 'Liberation Mono', monospace"
+<svg viewBox="0 0 1560 680" width="1560" height="680" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, 'Liberation Mono', monospace"
   aria-label="System architecture: the INA228 feeds Ina228Sensor into the TelemetryStore hub, which fans out over a telemetry bus to OledDisplay, BleTelemetryService, WebDashboard, MqttPublisher, LoadProtectionMonitor and Serial diagnostics; two physical buttons and the Web Dashboard drive dashed configuration paths; MqttPublisher reaches Home Assistant and LoadProtectionMonitor drives the Relay/SSR">
 
-<rect fill="#ffffff" stroke="#b9c0bd" stroke-width="2" x="2" y="2" width="1576" height="656" rx="4"></rect>
+<rect fill="#ffffff" stroke="#b9c0bd" stroke-width="2" x="2" y="2" width="1556" height="676" rx="4"></rect>
 
 <!-- buttons -->
-<circle fill="#ffffff" stroke="#16222c" stroke-width="1.6" cx="110" cy="50" r="26"></circle>
-<text fill="#16222c" font-size="13" font-weight="700" x="110" y="55" text-anchor="middle">D5</text>
-<text fill="#57676f" font-size="11" x="110" y="94" text-anchor="middle">Display button</text>
-<path fill="none" stroke="#8a969b" stroke-width="1.6" stroke-dasharray="4 4" stroke-linecap="round" d="M136,50 H1040 V90"></path>
-<text fill="#8a969b" font-size="10.5" x="600" y="42" text-anchor="middle">on/off, page</text>
+<circle fill="#ffffff" stroke="#16222c" stroke-width="1.6" cx="110" cy="40" r="27"></circle>
+<text fill="#16222c" font-size="17" font-weight="700" x="110" y="46" text-anchor="middle">D5</text>
+<text fill="#57676f" font-size="14.5" x="110" y="88" text-anchor="middle">Display button</text>
+<path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-dasharray="5 5" stroke-linecap="round" d="M137,40 H1065 V60"></path>
+<text fill="#8a969b" font-size="13" x="600" y="32" text-anchor="middle">on/off, page</text>
 
-<circle fill="#ffffff" stroke="#16222c" stroke-width="1.6" cx="110" cy="150" r="26"></circle>
-<text fill="#16222c" font-size="13" font-weight="700" x="110" y="155" text-anchor="middle">D4</text>
-<text fill="#57676f" font-size="11" x="110" y="194" text-anchor="middle">Reset button</text>
-<path fill="none" stroke="#8a969b" stroke-width="1.6" stroke-dasharray="4 4" stroke-linecap="round" d="M136,150 H755 V210"></path>
-<text fill="#8a969b" font-size="10.5" x="420" y="142" text-anchor="middle">reset session</text>
+<circle fill="#ffffff" stroke="#16222c" stroke-width="1.6" cx="110" cy="140" r="27"></circle>
+<text fill="#16222c" font-size="17" font-weight="700" x="110" y="146" text-anchor="middle">D4</text>
+<text fill="#57676f" font-size="14.5" x="110" y="188" text-anchor="middle">Reset button</text>
+<path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-dasharray="5 5" stroke-linecap="round" d="M137,140 H743 V286"></path>
+<text fill="#8a969b" font-size="13" x="420" y="132" text-anchor="middle">reset session</text>
 
 <!-- INA228 -->
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="200" y="260" width="150" height="90" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="275" y="298" text-anchor="middle">INA228</text>
-<text fill="#57676f" font-size="11" x="275" y="316" text-anchor="middle">current / voltage</text>
-<text fill="#57676f" font-size="11" x="275" y="331" text-anchor="middle">sensor, I2C</text>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="180" y="281" width="190" height="100" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="275" y="316" text-anchor="middle">INA228</text>
+<text fill="#57676f" font-size="14.5" x="275" y="338" text-anchor="middle">current / voltage</text>
+<text fill="#57676f" font-size="14.5" x="275" y="356" text-anchor="middle">sensor, I2C</text>
 
 <!-- Sensor -->
-<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M350,305 H430"></path>
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="430" y="260" width="150" height="90" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="505" y="300" text-anchor="middle">Ina228Sensor</text>
-<text fill="#57676f" font-size="11" x="505" y="318" text-anchor="middle">reads &amp; converts</text>
-<text fill="#57676f" font-size="11" x="505" y="333" text-anchor="middle">registers</text>
+<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" d="M370,331 H400"></path>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="400" y="281" width="190" height="100" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="495" y="318" text-anchor="middle">Ina228Sensor</text>
+<text fill="#57676f" font-size="14.5" x="495" y="340" text-anchor="middle">reads &amp; converts</text>
+<text fill="#57676f" font-size="14.5" x="495" y="358" text-anchor="middle">registers</text>
 
 <!-- Hub -->
-<path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M580,305 H660"></path>
-<rect fill="#e7d3bf" stroke="#16222c" stroke-width="2.2" x="660" y="210" width="190" height="190" rx="4"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="755" y="298" text-anchor="middle">TelemetryStore</text>
-<text fill="#57676f" font-size="11" x="755" y="318" text-anchor="middle">latest sample +</text>
-<text fill="#57676f" font-size="11" x="755" y="333" text-anchor="middle">session min/max/Ah/Wh</text>
+<path fill="none" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round" d="M590,331 H630"></path>
+<rect fill="#e7d3bf" stroke="#16222c" stroke-width="2.4" x="630" y="286" width="225" height="90" rx="4"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="742.5" y="316" text-anchor="middle">TelemetryStore</text>
+<text fill="#57676f" font-size="14.5" x="742.5" y="338" text-anchor="middle">latest sample +</text>
+<text fill="#57676f" font-size="14.5" x="742.5" y="356" text-anchor="middle">session min/max/Ah/Wh</text>
 
 <!-- Bus -->
-<path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M850,305 H890"></path>
-<path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M890,125 V565"></path>
+<path fill="none" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round" d="M855,331 H890"></path>
+<path fill="none" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round" d="M890,96 V566"></path>
 
 <!-- consumers -->
-<circle fill="#16222c" cx="890" cy="125" r="3.2"></circle>
-<path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M890,125 H930"></path>
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="90" width="220" height="70" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="1040" y="120" text-anchor="middle">OledDisplay</text>
-<text fill="#57676f" font-size="11" x="1040" y="138" text-anchor="middle">live / extrema pages</text>
+<!-- OLED y=60 h=72 mid=96 -->
+<circle fill="#16222c" cx="890" cy="96" r="3.6"></circle>
+<path fill="none" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round" d="M890,96 H930"></path>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="60" width="270" height="72" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="1065" y="94" text-anchor="middle">OledDisplay</text>
+<text fill="#57676f" font-size="14.5" x="1065" y="116" text-anchor="middle">live / extrema pages</text>
 
-<circle fill="#16222c" cx="890" cy="213" r="3.2"></circle>
-<path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M890,213 H930"></path>
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="178" width="220" height="70" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="1040" y="208" text-anchor="middle">BleTelemetryService</text>
-<text fill="#57676f" font-size="11" x="1040" y="226" text-anchor="middle">notify + controls</text>
+<!-- BLE y=154 h=72 mid=190 -->
+<circle fill="#16222c" cx="890" cy="190" r="3.6"></circle>
+<path fill="none" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round" d="M890,190 H930"></path>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="154" width="270" height="72" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="1065" y="188" text-anchor="middle">BleTelemetryService</text>
+<text fill="#57676f" font-size="14.5" x="1065" y="210" text-anchor="middle">notify + controls</text>
 
-<circle fill="#16222c" cx="890" cy="301" r="3.2"></circle>
-<path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M890,301 H930"></path>
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="266" width="220" height="70" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="1040" y="296" text-anchor="middle">WebDashboard</text>
-<text fill="#57676f" font-size="11" x="1040" y="314" text-anchor="middle">REST + WebSocket</text>
+<!-- WebDash y=248 h=72 mid=284 bottom=320 -->
+<circle fill="#16222c" cx="890" cy="284" r="3.6"></circle>
+<path fill="none" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round" d="M890,284 H930"></path>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="248" width="270" height="72" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="1065" y="282" text-anchor="middle">WebDashboard</text>
+<text fill="#57676f" font-size="14.5" x="1065" y="304" text-anchor="middle">REST + WebSocket</text>
 
-<circle fill="#16222c" cx="890" cy="389" r="3.2"></circle>
-<path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M890,389 H930"></path>
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="354" width="220" height="70" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="1040" y="384" text-anchor="middle">MqttPublisher</text>
-<text fill="#57676f" font-size="11" x="1040" y="402" text-anchor="middle">state + availability</text>
+<!-- MQTT y=342 h=72 mid=378 bottom=414 -->
+<circle fill="#16222c" cx="890" cy="378" r="3.6"></circle>
+<path fill="none" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round" d="M890,378 H930"></path>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="342" width="270" height="72" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="1065" y="376" text-anchor="middle">MqttPublisher</text>
+<text fill="#57676f" font-size="14.5" x="1065" y="398" text-anchor="middle">state + availability</text>
 
-<circle fill="#16222c" cx="890" cy="477" r="3.2"></circle>
-<path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M890,477 H930"></path>
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="442" width="220" height="70" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="1040" y="470" text-anchor="middle">LoadProtectionMonitor</text>
-<text fill="#57676f" font-size="11" x="1040" y="488" text-anchor="middle">low-V / low-SoC trip</text>
+<!-- LoadProt y=436 h=72 mid=472 -->
+<circle fill="#16222c" cx="890" cy="472" r="3.6"></circle>
+<path fill="none" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round" d="M890,472 H930"></path>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="436" width="270" height="72" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="1065" y="470" text-anchor="middle">LoadProtectionMonitor</text>
+<text fill="#57676f" font-size="14.5" x="1065" y="492" text-anchor="middle">low-V / low-SoC trip</text>
 
-<circle fill="#16222c" cx="890" cy="565" r="3.2"></circle>
-<path fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M890,565 H930"></path>
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="530" width="220" height="70" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="1040" y="560" text-anchor="middle">Serial diagnostics</text>
-<text fill="#57676f" font-size="11" x="1040" y="578" text-anchor="middle">boot log + status</text>
+<!-- Serial y=530 h=72 mid=566 -->
+<circle fill="#16222c" cx="890" cy="566" r="3.6"></circle>
+<path fill="none" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round" d="M890,566 H930"></path>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="930" y="530" width="270" height="72" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="1065" y="564" text-anchor="middle">Serial diagnostics</text>
+<text fill="#57676f" font-size="14.5" x="1065" y="586" text-anchor="middle">boot log + status</text>
 
-<!-- config wires -->
-<path fill="none" stroke="#8a969b" stroke-width="1.6" stroke-dasharray="4 4" stroke-linecap="round" d="M1040,336 V354"></path>
-<text fill="#8a969b" font-size="10.5" x="1058" y="348">configures</text>
+<!-- config wires: perpendicular approach only, never flush along a box border -->
+<path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-dasharray="5 5" stroke-linecap="round" d="M1065,320 V342"></path>
+<text fill="#8a969b" font-size="13" x="1082" y="335">configures</text>
 
-<path fill="none" stroke="#8a969b" stroke-width="1.6" stroke-dasharray="4 4" stroke-linecap="round" d="M1150,301 H1170 V442 H1040"></path>
-<text fill="#8a969b" font-size="10.5" x="1178" y="298">configures</text>
+<path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-dasharray="5 5" stroke-linecap="round" d="M1200,284 H1220 V425 H1065 V436"></path>
+<text fill="#8a969b" font-size="13" x="1228" y="280">configures</text>
 
 <!-- outputs -->
-<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M1150,389 H1190"></path>
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="1190" y="354" width="220" height="70" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="1300" y="384" text-anchor="middle">Home Assistant</text>
-<text fill="#57676f" font-size="11" x="1300" y="402" text-anchor="middle">MQTT discovery</text>
+<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" d="M1200,378 H1240"></path>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="1240" y="342" width="190" height="72" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="1335" y="376" text-anchor="middle">Home Assistant</text>
+<text fill="#57676f" font-size="14.5" x="1335" y="398" text-anchor="middle">MQTT discovery</text>
 
-<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M1150,477 H1190"></path>
-<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="1190" y="442" width="220" height="70" rx="3"></rect>
-<text fill="#16222c" font-size="14.5" font-weight="700" letter-spacing="0.01em" x="1300" y="470" text-anchor="middle">Relay / SSR</text>
-<text fill="#57676f" font-size="11" x="1300" y="488" text-anchor="middle">load disconnect</text>
+<path fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" d="M1200,472 H1240"></path>
+<rect fill="#ffffff" stroke="#16222c" stroke-width="1.6" x="1240" y="436" width="190" height="72" rx="3"></rect>
+<text fill="#16222c" font-size="19" font-weight="700" x="1335" y="470" text-anchor="middle">Relay / SSR</text>
+<text fill="#57676f" font-size="14.5" x="1335" y="492" text-anchor="middle">load disconnect</text>
 
-<path fill="none" stroke="#8a969b" stroke-width="1.6" stroke-dasharray="4 4" stroke-linecap="round" d="M1410,477 H1460"></path>
-<text fill="#8a969b" font-size="10.5" x="1465" y="481">to load</text>
+<path fill="none" stroke="#8a969b" stroke-width="1.8" stroke-dasharray="5 5" stroke-linecap="round" d="M1430,472 H1480"></path>
+<text fill="#8a969b" font-size="13" x="1485" y="477">to load</text>
 
 <!-- legend -->
-<line x1="30" y1="610" x2="58" y2="610" fill="none" stroke="#b8672e" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"></line>
-<text fill="#57676f" font-size="11" x="66" y="614">telemetry data path</text>
-<line x1="260" y1="610" x2="288" y2="610" fill="none" stroke="#16222c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line>
-<text fill="#57676f" font-size="11" x="296" y="614">downstream output</text>
-<line x1="490" y1="610" x2="518" y2="610" fill="none" stroke="#8a969b" stroke-width="1.6" stroke-dasharray="4 4" stroke-linecap="round"></line>
-<text fill="#57676f" font-size="11" x="526" y="614">configuration / control</text>
+<line x1="30" y1="630" x2="66" y2="630" stroke="#b8672e" stroke-width="2.5" stroke-linecap="round"></line>
+<text fill="#57676f" font-size="14.5" x="76" y="635">telemetry data path</text>
+<line x1="330" y1="630" x2="366" y2="630" stroke="#16222c" stroke-width="2"></line>
+<text fill="#57676f" font-size="14.5" x="376" y="635">downstream output</text>
+<line x1="610" y1="630" x2="646" y2="630" stroke="#8a969b" stroke-width="1.8" stroke-dasharray="5 5"></line>
+<text fill="#57676f" font-size="14.5" x="656" y="635">configuration / control</text>
 </svg>
