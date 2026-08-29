@@ -27,6 +27,18 @@ path is the telemetry flow from sensor to consumers. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full component
 breakdown, including the Settings/Monitor pattern each consumer here follows.
 
+### Wiring
+
+![Full wiring diagram: battery positive feeds the load-protection SSR to the load, battery negative feeds a low-side Kelvin shunt to the load, INA228 senses VBUS+ from battery positive and IN-/IN+ from the shunt sense screws, INA228 and OLED share an I2C bus with the XIAO ESP32-C3, two pushbuttons and a GPIO5 driver stage control the SSR, and everything shares one common ground](docs/images/wiring_diagram.svg)
+
+The shunt is low-side (in the battery/load negative return, per
+[docs/SHUNT_COMMISSIONING.md](docs/SHUNT_COMMISSIONING.md)); the
+load-protection SSR is a separate, independent break in the positive lead.
+INA228's `VBUS+` taps battery positive directly, ahead of the SSR, so
+voltage/SoC/alarms keep reading the true battery state even when the SSR has
+disconnected the load. See [docs/HARDWARE.md](docs/HARDWARE.md) for pin
+assignments, I2C addresses and the driver-stage component values.
+
 ### OLED display
 
 The two pages the physical button cycles between (recreated here for
