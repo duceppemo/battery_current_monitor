@@ -133,7 +133,7 @@
 <path fill="none" stroke="#3a6ea5" stroke-width="1.8" stroke-linecap="round" d="M840,570 H983"></path>
 <circle fill="#ffffff" stroke="#16222c" stroke-width="1.6" cx="1010" cy="570" r="27"></circle>
 <text fill="#16222c" font-size="16" font-weight="700" x="1010" y="576" text-anchor="middle">D2</text>
-<text fill="#57676f" font-size="12.5" x="1010" y="533" text-anchor="middle">Display button</text>
+<text fill="#57676f" font-size="12" x="960" y="533" text-anchor="start">Display button</text>
 <path fill="none" stroke="#16222c" stroke-width="1.8" stroke-linecap="round" d="M1010,597 V870"></path>
 
 <!-- driver stage: D3 -> R1 -> Q1 base, R2 pulldown, Q1 collector/emitter -->
