@@ -30,7 +30,9 @@ bool AlarmSettings::isValid(const DeviceAlarmSettings& s)
 {
     return std::isfinite(s.lowVoltage) && std::isfinite(s.highVoltage) &&
            std::isfinite(s.maxAbsoluteCurrent) && std::isfinite(s.maxTemperature) &&
-           s.lowVoltage >= 0.0f && s.lowVoltage < s.highVoltage && s.highVoltage <= 100.0f &&
+           s.lowVoltage >= 0.0f && s.highVoltage <= 100.0f &&
+           // Only a pair of *active* voltage alarms needs a sane ordering.
+           (!(s.lowVoltageEnabled && s.highVoltageEnabled) || s.lowVoltage < s.highVoltage) &&
            s.maxAbsoluteCurrent > 0.0f && s.maxAbsoluteCurrent <= 200.0f &&
            s.maxTemperature > -40.0f && s.maxTemperature <= 125.0f;
 }

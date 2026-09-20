@@ -9,8 +9,10 @@ struct DeviceAlarmSettings
     bool currentEnabled = false;
     bool temperatureEnabled = false;
     bool sensorHealthEnabled = false;
-    float lowVoltage = 3.0f;
-    float highVoltage = 4.25f;
+    // Defaults match the 12 V-class battery profile default (14.4 V charged)
+    // rather than a single lithium cell; both alarms are off until saved.
+    float lowVoltage = 11.0f;
+    float highVoltage = 15.0f;
     float maxAbsoluteCurrent = 5.0f;
     float maxTemperature = 60.0f;
 };

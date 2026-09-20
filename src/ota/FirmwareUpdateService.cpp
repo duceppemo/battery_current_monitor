@@ -185,7 +185,12 @@ bool FirmwareUpdateService::verifySignature()
 {
     uint8_t digest[32];
     mbedtls_sha256_finish_ret(&sha256Ctx_, digest);
+    return verifyImageSignature(digest, signature_);
+}
 
+bool FirmwareUpdateService::verifyImageSignature(
+    const uint8_t digest[32], const uint8_t signature[SIGNATURE_SIZE])
+{
     mbedtls_ecp_group group;
     mbedtls_ecp_point publicKey;
     mbedtls_mpi r;
@@ -201,9 +206,9 @@ bool FirmwareUpdateService::verifySignature()
             &group, &publicKey,
             Config::FIRMWARE_SIGNING_PUBLIC_KEY,
             sizeof(Config::FIRMWARE_SIGNING_PUBLIC_KEY)) == 0 &&
-        mbedtls_mpi_read_binary(&r, signature_, SIGNATURE_SIZE / 2) == 0 &&
-        mbedtls_mpi_read_binary(&s, signature_ + SIGNATURE_SIZE / 2, SIGNATURE_SIZE / 2) == 0) {
-        verified = mbedtls_ecdsa_verify(&group, digest, sizeof(digest), &publicKey, &r, &s) == 0;
+        mbedtls_mpi_read_binary(&r, signature, SIGNATURE_SIZE / 2) == 0 &&
+        mbedtls_mpi_read_binary(&s, signature + SIGNATURE_SIZE / 2, SIGNATURE_SIZE / 2) == 0) {
+        verified = mbedtls_ecdsa_verify(&group, digest, 32, &publicKey, &r, &s) == 0;
     }
 
     mbedtls_mpi_free(&s);
@@ -234,7 +239,11 @@ void FirmwareUpdateService::abort()
 
 void FirmwareUpdateService::fail(Error error)
 {
-    if (owner_.load() == Owner::Ble && state_.load() == State::Receiving) {
+    // Verifying still holds an open Update session (see abort()); a stray
+    // DATA/FINISH frame arriving in that state must discard it too, or
+    // every later start() fails until the next reboot.
+    if (owner_.load() == Owner::Ble &&
+        (state_.load() == State::Receiving || state_.load() == State::Verifying)) {
         Update.abort();
     }
     release(Owner::Ble);

@@ -46,11 +46,26 @@ public:
     const EnergyTotals& totals() const { return totals_; }
 
 private:
-    static void accumulateDirectional(float start, float end, float hours,
-                                      float& positive, float& negative);
+    // Running sums are double: a float absorbs a 0.5 s increment at low
+    // power once the total reaches the low thousands of Wh, silently
+    // freezing the counter. EnergyTotals stays float for every consumer.
+    struct RunningTotals
+    {
+        double netAh = 0.0;
+        double netWh = 0.0;
+        double dischargedAh = 0.0;
+        double dischargedWh = 0.0;
+        double chargedAh = 0.0;
+        double chargedWh = 0.0;
+    };
+
+    static void accumulateDirectional(float start, float end, double hours,
+                                      double& positive, double& negative);
+    void publishTotals();
     void persistIfDue(uint32_t nowMs, bool force);
 
     Telemetry previous_;
+    RunningTotals running_;
     EnergyTotals totals_;
     bool hasPrevious_ = false;
     uint32_t lastPersistMs_ = 0;

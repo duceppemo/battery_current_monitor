@@ -26,7 +26,9 @@ private:
 };
 
 /// Sends a push notification via ntfy (https://ntfy.sh or a self-hosted
-/// instance behind HTTPS) on the rising edge of each alarm condition --
+/// instance behind HTTPS with a Let's Encrypt certificate; TLS is verified
+/// against the ISRG Root X1 CA in NtfyRootCa.h, nothing else is trusted)
+/// on the rising edge of each alarm condition --
 /// entirely optional and no-op unless a topic is configured. Requires
 /// station mode with real internet access, same as MQTT and the GitHub
 /// release check; Web Dashboard only, no BLE surface, for the same reason.

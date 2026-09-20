@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
+#include <mbedtls/sha256.h>
 
 #include "alarm/AlarmSettings.h"
 #include "energy/EnergyAccumulator.h"
@@ -129,6 +130,9 @@ private:
     void maintainStation(uint32_t nowMs);
     bool queueCommand(PendingCommand command);
     bool consumeCommand(PendingCommand command);
+    // Cross-site request forgery guard for every state-changing route.
+    bool mutationAuthorized();
+    bool authorizeMutation();
 
     static void appendNullableFloat(
         String& json,
@@ -198,5 +202,11 @@ private:
     uint32_t failedSamples_ = 0;
     bool firmwareUpdateSucceeded_ = false;
     char firmwareUpdateError_[64] = "";
+    // Web OTA: detached signature part received ahead of the image part,
+    // and the running digest of the image bytes it must match.
+    uint8_t webSignature_[FirmwareUpdateService::SIGNATURE_SIZE] = {};
+    size_t webSignatureLength_ = 0;
+    mbedtls_sha256_context webSha256_;
+    bool webSha256Active_ = false;
     uint32_t restartAfterMs_ = 0;
 };

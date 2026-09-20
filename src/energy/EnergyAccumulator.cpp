@@ -6,7 +6,7 @@
 
 namespace
 {
-    constexpr float MS_PER_HOUR = 3600000.0f;
+    constexpr double MS_PER_HOUR = 3600000.0;
 
     constexpr char SETTINGS_NS[] = "bm_energyp";
     constexpr char SETTINGS_ENABLED_KEY[] = "enabled";
@@ -47,14 +47,25 @@ void EnergyAccumulator::begin(const EnergyPersistenceConfig& settings)
     Preferences p;
     if (!p.begin(STATE_NS, true)) return;
     if (p.getUInt(STATE_SCHEMA_KEY, 0) == STATE_SCHEMA_VERSION) {
-        totals_.netAh = p.getFloat(STATE_NET_AH_KEY, 0.0f);
-        totals_.netWh = p.getFloat(STATE_NET_WH_KEY, 0.0f);
-        totals_.dischargedAh = p.getFloat(STATE_DISCHARGED_AH_KEY, 0.0f);
-        totals_.dischargedWh = p.getFloat(STATE_DISCHARGED_WH_KEY, 0.0f);
-        totals_.chargedAh = p.getFloat(STATE_CHARGED_AH_KEY, 0.0f);
-        totals_.chargedWh = p.getFloat(STATE_CHARGED_WH_KEY, 0.0f);
+        running_.netAh = p.getFloat(STATE_NET_AH_KEY, 0.0f);
+        running_.netWh = p.getFloat(STATE_NET_WH_KEY, 0.0f);
+        running_.dischargedAh = p.getFloat(STATE_DISCHARGED_AH_KEY, 0.0f);
+        running_.dischargedWh = p.getFloat(STATE_DISCHARGED_WH_KEY, 0.0f);
+        running_.chargedAh = p.getFloat(STATE_CHARGED_AH_KEY, 0.0f);
+        running_.chargedWh = p.getFloat(STATE_CHARGED_WH_KEY, 0.0f);
+        publishTotals();
     }
     p.end();
+}
+
+void EnergyAccumulator::publishTotals()
+{
+    totals_.netAh = static_cast<float>(running_.netAh);
+    totals_.netWh = static_cast<float>(running_.netWh);
+    totals_.dischargedAh = static_cast<float>(running_.dischargedAh);
+    totals_.dischargedWh = static_cast<float>(running_.dischargedWh);
+    totals_.chargedAh = static_cast<float>(running_.chargedAh);
+    totals_.chargedWh = static_cast<float>(running_.chargedWh);
 }
 
 void EnergyAccumulator::update(const Telemetry& sample, const EnergyPersistenceConfig& settings)
@@ -81,24 +92,25 @@ void EnergyAccumulator::update(const Telemetry& sample, const EnergyPersistenceC
         return;
     }
 
-    const float elapsedHours = static_cast<float>(elapsedMs) / MS_PER_HOUR;
-    totals_.netAh += (previous_.current + sample.current) * 0.5f * elapsedHours;
-    totals_.netWh += (previous_.power + sample.power) * 0.5f * elapsedHours;
+    const double elapsedHours = static_cast<double>(elapsedMs) / MS_PER_HOUR;
+    running_.netAh += (static_cast<double>(previous_.current) + sample.current) * 0.5 * elapsedHours;
+    running_.netWh += (static_cast<double>(previous_.power) + sample.power) * 0.5 * elapsedHours;
 
     accumulateDirectional(
         previous_.current,
         sample.current,
         elapsedHours,
-        totals_.dischargedAh,
-        totals_.chargedAh
+        running_.dischargedAh,
+        running_.chargedAh
     );
     accumulateDirectional(
         previous_.power,
         sample.power,
         elapsedHours,
-        totals_.dischargedWh,
-        totals_.chargedWh
+        running_.dischargedWh,
+        running_.chargedWh
     );
+    publishTotals();
 
     previous_ = sample;
     dirty_ = true;
@@ -107,6 +119,7 @@ void EnergyAccumulator::update(const Telemetry& sample, const EnergyPersistenceC
 
 void EnergyAccumulator::reset(const EnergyPersistenceConfig& settings)
 {
+    running_ = RunningTotals{};
     totals_ = EnergyTotals{};
     hasPrevious_ = false;
     dirty_ = true;
@@ -147,33 +160,35 @@ void EnergyAccumulator::persistIfDue(uint32_t nowMs, bool force)
 void EnergyAccumulator::accumulateDirectional(
     float start,
     float end,
-    float hours,
-    float& positive,
-    float& negative)
+    double hours,
+    double& positive,
+    double& negative)
 {
+    const double startD = start;
+    const double endD = end;
     if (start >= 0.0f && end >= 0.0f) {
-        positive += (start + end) * 0.5f * hours;
+        positive += (startD + endD) * 0.5 * hours;
         return;
     }
 
     if (start <= 0.0f && end <= 0.0f) {
-        negative += -(start + end) * 0.5f * hours;
+        negative += -(startD + endD) * 0.5 * hours;
         return;
     }
 
     // Split a linear sample interval exactly at its zero crossing so charging
     // and discharging totals never cancel each other during a sign change.
-    const float positiveFraction = start > 0.0f
-        ? start / (start - end)
-        : -end / (start - end);
-    const float positiveHours = hours * positiveFraction;
-    const float negativeHours = hours - positiveHours;
+    const double positiveFraction = start > 0.0f
+        ? startD / (startD - endD)
+        : -endD / (startD - endD);
+    const double positiveHours = hours * positiveFraction;
+    const double negativeHours = hours - positiveHours;
 
     if (start > 0.0f) {
-        positive += start * 0.5f * positiveHours;
-        negative += -end * 0.5f * negativeHours;
+        positive += startD * 0.5 * positiveHours;
+        negative += -endD * 0.5 * negativeHours;
     } else {
-        negative += -start * 0.5f * negativeHours;
-        positive += end * 0.5f * positiveHours;
+        negative += -startD * 0.5 * negativeHours;
+        positive += endD * 0.5 * positiveHours;
     }
 }

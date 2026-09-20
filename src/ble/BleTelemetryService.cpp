@@ -820,10 +820,11 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
     }
 
     const uint8_t* data = reinterpret_cast<const uint8_t*>(value.c_str());
-    const uint16_t requestId = value.length() >= 3
-        ? static_cast<uint16_t>(data[value.length() - 2]) |
-              (static_cast<uint16_t>(data[value.length() - 1]) << 8)
-        : 0;
+    // Each command's payload (including the command byte) has one fixed
+    // size, optionally followed by a u16 request ID. Anything else is
+    // malformed: accepting a longer-than-payload write and reading the ID
+    // from its last two bytes would otherwise pull it out of the payload.
+    size_t payloadLength = 1;
     PendingCommand command = PendingCommand::None;
     switch (data[0]) {
     case CONTROL_RESET_EXTREMA: command = PendingCommand::ResetExtrema; break;
@@ -831,35 +832,36 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
     case CONTROL_TOGGLE_DISPLAY: command = PendingCommand::ToggleDisplay; break;
     case CONTROL_RESET_CALIBRATION: command = PendingCommand::ResetCalibration; break;
     case CONTROL_SAVE_CALIBRATION:
-        if (value.length() < 13) {
-            return;
-        }
+        // command(1) + resistance uOhm u32(4) + offset nV i32(4) + gain ppm i32(4)
+        payloadLength = 13;
         command = PendingCommand::SaveCalibration;
         break;
     case CONTROL_SAVE_ALARMS:
-        if (value.length() < 13) return;
+        // command(1) + flags(1) + low mV u16(2) + high mV u16(2) + current mA
+        // i24(3) + temperature deci-C i32(4)
+        payloadLength = 13;
         command = PendingCommand::SaveAlarms;
         break;
     case CONTROL_CLEAR_WIFI: command = PendingCommand::ClearWifi; break;
     case CONTROL_SYNC_BATTERY_FULL: command = PendingCommand::SyncBatteryFull; break;
     case CONTROL_RESET_BATTERY_HISTORY: command = PendingCommand::ResetBatteryHistory; break;
     case CONTROL_SAVE_BATTERY_PROFILE:
-        // command(1) + capacity milli-Ah u32(4) + charged voltage mV u16(2) + requestId(2)
-        if (value.length() < 9) return;
+        // command(1) + capacity milli-Ah u32(4) + charged voltage mV u16(2)
+        payloadLength = 7;
         command = PendingCommand::SaveBatteryProfile;
         break;
     case CONTROL_SAVE_LOAD_PROTECTION:
         // command(1) + enabledFlag(1) + lowVoltage mV u16(2) + lowSocPercent
-        // deci-percent u16(2) + requestId(2)
-        if (value.length() < 8) return;
+        // deci-percent u16(2)
+        payloadLength = 6;
         command = PendingCommand::SaveLoadProtection;
         break;
     case CONTROL_RECONNECT_LOAD: command = PendingCommand::ReconnectLoad; break;
     case CONTROL_TEST_CONNECT_LOAD: command = PendingCommand::TestConnectLoad; break;
     case CONTROL_TEST_DISCONNECT_LOAD: command = PendingCommand::TestDisconnectLoad; break;
     case CONTROL_SAVE_ENERGY_PERSISTENCE:
-        // command(1) + enabledFlag(1) + requestId(2)
-        if (value.length() < 4) return;
+        // command(1) + enabledFlag(1)
+        payloadLength = 2;
         command = PendingCommand::SaveEnergyPersistence;
         break;
     case CONTROL_SAVE_WIFI: {
@@ -871,6 +873,7 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
         const uint8_t passwordLength = data[2 + ssidLength];
         if (passwordLength >= sizeof(WifiStationSettings::password)) return;
         if (value.length() != static_cast<size_t>(3 + ssidLength + passwordLength + 2)) return;
+        payloadLength = value.length() - 2;
         command = PendingCommand::SaveWifi;
         break;
     }
@@ -880,12 +883,20 @@ void BleTelemetryService::ControlCallbacks::onWrite(BLECharacteristic* character
         const uint8_t nameLength = data[1];
         if (nameLength >= sizeof(DeviceNameConfig::name)) return;
         if (value.length() != static_cast<size_t>(2 + nameLength + 2)) return;
+        payloadLength = value.length() - 2;
         command = PendingCommand::SaveDeviceName;
         break;
     }
     default:
         return;
     }
+
+    if (value.length() != payloadLength && value.length() != payloadLength + 2) return;
+    // Older clients may omit the request ID and get status with ID zero.
+    const uint16_t requestId = value.length() == payloadLength + 2
+        ? static_cast<uint16_t>(data[payloadLength]) |
+              (static_cast<uint16_t>(data[payloadLength + 1]) << 8)
+        : 0;
 
     uint8_t expected = static_cast<uint8_t>(PendingCommand::None);
     if (owner_.pendingCommand_.compare_exchange_strong(
@@ -948,6 +959,11 @@ void BleTelemetryService::FirmwareTransferCallbacks::onWrite(BLECharacteristic* 
     owner_.publishFirmwareUpdateStatus(owner_.connected());
 }
 
+bool BleTelemetryService::commandPending(PendingCommand command) const
+{
+    return pendingCommand_.load() == static_cast<uint8_t>(command);
+}
+
 bool BleTelemetryService::consumeCommand(PendingCommand command, uint16_t& requestId)
 {
     uint8_t expected = static_cast<uint8_t>(command);
@@ -978,14 +994,11 @@ bool BleTelemetryService::consumeCalibrationSaveRequested(
     CurrentCalibration& calibration,
     uint16_t& requestId)
 {
-    if (!consumeCommand(PendingCommand::SaveCalibration, requestId)) {
-        return false;
-    }
-
+    if (!commandPending(PendingCommand::SaveCalibration)) return false;
     calibration.shuntResistanceOhms = static_cast<float>(pendingResistanceMicroOhms_.load()) * 1.0e-6f;
     calibration.shuntOffsetVolts = static_cast<float>(pendingOffsetNanoVolts_.load()) * 1.0e-9f;
     calibration.currentGain = static_cast<float>(pendingGainPpm_.load()) * 1.0e-6f;
-    return true;
+    return consumeCommand(PendingCommand::SaveCalibration, requestId);
 }
 
 bool BleTelemetryService::consumeCalibrationResetRequested(uint16_t& requestId)
@@ -997,7 +1010,7 @@ bool BleTelemetryService::consumeAlarmSaveRequested(
     DeviceAlarmSettings& settings,
     uint16_t& requestId)
 {
-    if (!consumeCommand(PendingCommand::SaveAlarms, requestId)) return false;
+    if (!commandPending(PendingCommand::SaveAlarms)) return false;
     const uint8_t flags = pendingAlarmFlags_.load();
     settings.lowVoltageEnabled = (flags & 1) != 0;
     settings.highVoltageEnabled = (flags & 2) != 0;
@@ -1008,16 +1021,16 @@ bool BleTelemetryService::consumeAlarmSaveRequested(
     settings.highVoltage = pendingHighVoltageMv_.load() / 1000.0f;
     settings.maxAbsoluteCurrent = pendingCurrentMa_.load() / 1000.0f;
     settings.maxTemperature = pendingTemperatureDeciC_.load() / 10.0f;
-    return true;
+    return consumeCommand(PendingCommand::SaveAlarms, requestId);
 }
 
 bool BleTelemetryService::consumeWifiSaveRequested(
     WifiStationSettings& settings,
     uint16_t& requestId)
 {
-    if (!consumeCommand(PendingCommand::SaveWifi, requestId)) return false;
+    if (!commandPending(PendingCommand::SaveWifi)) return false;
     settings = pendingWifiSettings_;
-    return true;
+    return consumeCommand(PendingCommand::SaveWifi, requestId);
 }
 
 bool BleTelemetryService::consumeWifiClearRequested(uint16_t& requestId)
@@ -1029,9 +1042,9 @@ bool BleTelemetryService::consumeBatteryProfileSaveRequested(
     BatteryProfileSettings& settings,
     uint16_t& requestId)
 {
-    if (!consumeCommand(PendingCommand::SaveBatteryProfile, requestId)) return false;
+    if (!commandPending(PendingCommand::SaveBatteryProfile)) return false;
     settings = pendingBatteryProfile_;
-    return true;
+    return consumeCommand(PendingCommand::SaveBatteryProfile, requestId);
 }
 
 bool BleTelemetryService::consumeBatterySyncRequested(uint16_t& requestId)
@@ -1048,11 +1061,11 @@ bool BleTelemetryService::consumeLoadProtectionSaveRequested(
     LoadProtectionConfig& settings,
     uint16_t& requestId)
 {
-    if (!consumeCommand(PendingCommand::SaveLoadProtection, requestId)) return false;
+    if (!commandPending(PendingCommand::SaveLoadProtection)) return false;
     settings.enabled = pendingProtectionEnabled_.load() != 0;
     settings.lowVoltageThreshold = pendingProtectionLowVoltageMv_.load() / 1000.0f;
     settings.lowSocPercentThreshold = pendingProtectionLowSocDeciPercent_.load() / 10.0f;
-    return true;
+    return consumeCommand(PendingCommand::SaveLoadProtection, requestId);
 }
 
 bool BleTelemetryService::consumeLoadProtectionReconnectRequested(uint16_t& requestId)
@@ -1074,18 +1087,18 @@ bool BleTelemetryService::consumeEnergyPersistenceSaveRequested(
     EnergyPersistenceConfig& settings,
     uint16_t& requestId)
 {
-    if (!consumeCommand(PendingCommand::SaveEnergyPersistence, requestId)) return false;
+    if (!commandPending(PendingCommand::SaveEnergyPersistence)) return false;
     settings.enabled = pendingEnergyPersistenceEnabled_.load() != 0;
-    return true;
+    return consumeCommand(PendingCommand::SaveEnergyPersistence, requestId);
 }
 
 bool BleTelemetryService::consumeDeviceNameSaveRequested(
     DeviceNameConfig& settings,
     uint16_t& requestId)
 {
-    if (!consumeCommand(PendingCommand::SaveDeviceName, requestId)) return false;
+    if (!commandPending(PendingCommand::SaveDeviceName)) return false;
     settings = pendingDeviceName_;
-    return true;
+    return consumeCommand(PendingCommand::SaveDeviceName, requestId);
 }
 
 void BleTelemetryService::maintain()

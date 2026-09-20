@@ -157,27 +157,36 @@ void WebDashboard::begin(
 
     server_.on("/", HTTP_GET, [this]() { handleRoot(); });
     server_.on("/api/telemetry", HTTP_GET, [this]() { handleTelemetry(); });
-    server_.on("/api/reset-extrema", HTTP_POST, [this]() { handleResetExtrema(); });
-    server_.on("/api/reset-session", HTTP_POST, [this]() { handleResetSession(); });
-    server_.on("/api/toggle-display", HTTP_POST, [this]() { handleToggleDisplay(); });
-    server_.on("/api/calibration/save", HTTP_POST, [this]() { handleCalibrationSave(); });
-    server_.on("/api/calibration/reset", HTTP_POST, [this]() { handleCalibrationReset(); });
-    server_.on("/api/alarms/save", HTTP_POST, [this]() { handleAlarmSave(); });
-    server_.on("/api/wifi/save", HTTP_POST, [this]() { handleWifiSave(); });
-    server_.on("/api/wifi/clear", HTTP_POST, [this]() { handleWifiClear(); });
-    server_.on("/api/battery/save", HTTP_POST, [this]() { handleBatterySave(); });
-    server_.on("/api/battery/sync", HTTP_POST, [this]() { handleBatterySync(); });
-    server_.on("/api/battery/reset-history", HTTP_POST, [this]() { handleBatteryHistoryReset(); });
-    server_.on("/api/mqtt/save", HTTP_POST, [this]() { handleMqttSave(); });
-    server_.on("/api/ntfy/save", HTTP_POST, [this]() { handleNtfySave(); });
-    server_.on("/api/device-name/save", HTTP_POST, [this]() { handleDeviceNameSave(); });
-    server_.on("/api/protection/save", HTTP_POST, [this]() { handleLoadProtectionSave(); });
-    server_.on("/api/protection/reconnect", HTTP_POST, [this]() { handleLoadProtectionReconnect(); });
-    server_.on("/api/protection/test-disconnect", HTTP_POST, [this]() { handleLoadProtectionTestDisconnect(); });
-    server_.on("/api/protection/test-connect", HTTP_POST, [this]() { handleLoadProtectionTestConnect(); });
-    server_.on("/api/energy-persistence/save", HTTP_POST, [this]() { handleEnergyPersistenceSave(); });
+    // Every state-changing route goes through authorizeMutation() first;
+    // see that method for the cross-site request forgery reasoning.
+    auto post = [this](const char* path, void (WebDashboard::*handler)()) {
+        server_.on(path, HTTP_POST, [this, handler]() {
+            if (!authorizeMutation()) return;
+            (this->*handler)();
+        });
+    };
+    post("/api/reset-extrema", &WebDashboard::handleResetExtrema);
+    post("/api/reset-session", &WebDashboard::handleResetSession);
+    post("/api/toggle-display", &WebDashboard::handleToggleDisplay);
+    post("/api/calibration/save", &WebDashboard::handleCalibrationSave);
+    post("/api/calibration/reset", &WebDashboard::handleCalibrationReset);
+    post("/api/alarms/save", &WebDashboard::handleAlarmSave);
+    post("/api/wifi/save", &WebDashboard::handleWifiSave);
+    post("/api/wifi/clear", &WebDashboard::handleWifiClear);
+    post("/api/battery/save", &WebDashboard::handleBatterySave);
+    post("/api/battery/sync", &WebDashboard::handleBatterySync);
+    post("/api/battery/reset-history", &WebDashboard::handleBatteryHistoryReset);
+    post("/api/mqtt/save", &WebDashboard::handleMqttSave);
+    post("/api/ntfy/save", &WebDashboard::handleNtfySave);
+    post("/api/device-name/save", &WebDashboard::handleDeviceNameSave);
+    post("/api/protection/save", &WebDashboard::handleLoadProtectionSave);
+    post("/api/protection/reconnect", &WebDashboard::handleLoadProtectionReconnect);
+    post("/api/protection/test-disconnect", &WebDashboard::handleLoadProtectionTestDisconnect);
+    post("/api/protection/test-connect", &WebDashboard::handleLoadProtectionTestConnect);
+    post("/api/energy-persistence/save", &WebDashboard::handleEnergyPersistenceSave);
     server_.on("/api/firmware", HTTP_POST,
         [this]() {
+            if (!authorizeMutation()) return;
             if (firmwareUpdateSucceeded_) {
                 server_.send(200, "application/json", "{\"ok\":true,\"message\":\"Firmware written; restarting\"}");
                 restartAfterMs_ = millis() + 750;
@@ -190,6 +199,9 @@ void WebDashboard::begin(
         },
         [this]() { handleFirmwareUpload(); });
     server_.onNotFound([this]() { handleNotFound(); });
+    // WebServer only retains headers it was told to collect.
+    static const char* COLLECTED_HEADERS[] = {"X-Requested-With"};
+    server_.collectHeaders(COLLECTED_HEADERS, 1);
     server_.begin();
 
     webSocket_.begin();
@@ -369,6 +381,24 @@ void WebDashboard::setCalibrationStatus(const char* status)
         "%s",
         status != nullptr ? status : "unknown"
     );
+}
+
+bool WebDashboard::mutationAuthorized()
+{
+    // A browser only attaches a custom header to a same-origin script
+    // request; a cross-origin one triggers a CORS preflight this server
+    // never answers. So a form, image or script on any other page the
+    // operator's browser visits (on the same LAN or not) cannot drive
+    // these endpoints -- only this dashboard's own JavaScript can.
+    return server_.header("X-Requested-With") == "BatteryMonitor";
+}
+
+bool WebDashboard::authorizeMutation()
+{
+    if (mutationAuthorized()) return true;
+    server_.send(403, "application/json",
+        "{\"error\":\"missing X-Requested-With: BatteryMonitor header\"}");
+    return false;
 }
 
 bool WebDashboard::queueCommand(PendingCommand command)
@@ -850,6 +880,11 @@ void WebDashboard::handleAlarmSave()
         !parseFiniteFloat(server_, "temperature", requested.maxTemperature)) {
         server_.send(400, "application/json", "{\"error\":\"invalid alarms\"}"); return;
     }
+    // Range-check before narrowing: float -> uint8_t is undefined for
+    // negative or out-of-range values.
+    if (flagsValue < 0.0f || flagsValue > 31.0f || flagsValue != floorf(flagsValue)) {
+        server_.send(400, "application/json", "{\"error\":\"invalid alarms\"}"); return;
+    }
     const uint8_t flags = static_cast<uint8_t>(flagsValue);
     requested.lowVoltageEnabled = (flags & 1) != 0;
     requested.highVoltageEnabled = (flags & 2) != 0;
@@ -1047,38 +1082,83 @@ void WebDashboard::stationIpOctets(uint8_t octets[4]) const
 void WebDashboard::handleFirmwareUpload()
 {
     HTTPUpload& upload = server_.upload();
+
+    // The dashboard sends the detached 64-byte signature as its own part,
+    // ahead of the image, so it is already in hand when the image starts.
+    if (upload.name == "signature") {
+        if (upload.status == UPLOAD_FILE_START) {
+            webSignatureLength_ = 0;
+        } else if (upload.status == UPLOAD_FILE_WRITE) {
+            const size_t room = webSignatureLength_ <= sizeof(webSignature_)
+                ? sizeof(webSignature_) - webSignatureLength_ : 0;
+            const size_t take = upload.currentSize < room ? upload.currentSize : room;
+            memcpy(webSignature_ + webSignatureLength_, upload.buf, take);
+            // Anything past 64 bytes is not a valid raw r||s signature; mark
+            // the length invalid so the image part is refused.
+            webSignatureLength_ = take < upload.currentSize
+                ? sizeof(webSignature_) + 1 : webSignatureLength_ + take;
+        }
+        return;
+    }
+
     switch (upload.status) {
     case UPLOAD_FILE_START:
         firmwareUpdateSucceeded_ = false;
         firmwareUpdateError_[0] = '\0';
-        if (!upload.filename.endsWith(".bin") || firmwareUpdate_ == nullptr ||
+        if (!mutationAuthorized()) {
+            snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "unauthorized");
+        } else if (webSignatureLength_ != sizeof(webSignature_)) {
+            snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "signature (.sig) file missing");
+        } else if (!upload.filename.endsWith(".bin") || firmwareUpdate_ == nullptr ||
             !firmwareUpdate_->beginWebUpdate()) {
             snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "update start rejected");
         } else if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
             firmwareUpdate_->abandonWebUpdate();
             snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "update start rejected");
+        } else {
+            mbedtls_sha256_init(&webSha256_);
+            mbedtls_sha256_starts_ret(&webSha256_, 0);
+            webSha256Active_ = true;
         }
         break;
     case UPLOAD_FILE_WRITE:
-        if (firmwareUpdateError_[0] == '\0' &&
-            Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+        if (firmwareUpdateError_[0] != '\0') break;
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
             Update.abort();
             firmwareUpdate_->abandonWebUpdate();
             snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "firmware write failed");
+            break;
         }
+        mbedtls_sha256_update_ret(&webSha256_, upload.buf, upload.currentSize);
         break;
-    case UPLOAD_FILE_END:
-        if (firmwareUpdateError_[0] == '\0' && Update.end(true)) {
+    case UPLOAD_FILE_END: {
+        if (firmwareUpdateError_[0] != '\0') break;
+        uint8_t digest[32];
+        mbedtls_sha256_finish_ret(&webSha256_, digest);
+        mbedtls_sha256_free(&webSha256_);
+        webSha256Active_ = false;
+        // Same rule as the BLE path: verify before Update.end(), which is
+        // what marks the new slot bootable; abort() discards the write.
+        if (!FirmwareUpdateService::verifyImageSignature(digest, webSignature_)) {
+            Update.abort();
+            firmwareUpdate_->abandonWebUpdate();
+            snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "firmware signature verification failed");
+        } else if (Update.end(true)) {
             firmwareUpdateSucceeded_ = true;
-        } else if (firmwareUpdateError_[0] == '\0') {
+        } else {
             Update.abort();
             firmwareUpdate_->abandonWebUpdate();
             snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "firmware verification failed");
         }
         break;
+    }
     case UPLOAD_FILE_ABORTED:
         Update.abort();
         if (firmwareUpdate_ != nullptr) firmwareUpdate_->abandonWebUpdate();
+        if (webSha256Active_) {
+            mbedtls_sha256_free(&webSha256_);
+            webSha256Active_ = false;
+        }
         snprintf(firmwareUpdateError_, sizeof(firmwareUpdateError_), "upload aborted");
         break;
     default:

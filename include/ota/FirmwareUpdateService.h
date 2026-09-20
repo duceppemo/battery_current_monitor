@@ -13,10 +13,10 @@
 // ECDSA-P256 signature over their SHA-256 digest, verified against the
 // public key embedded in FirmwareSigningKey.h before the image is ever
 // marked bootable -- CRC-32 alone only catches accidental corruption, not a
-// deliberately substituted image. The Web Dashboard upload path is
-// unaffected: it stays CRC/format-checked only, matching its role as a
-// secondary/recovery path that already requires reaching the recovery AP or
-// home network.
+// deliberately substituted image. The Web Dashboard upload path applies the
+// same rule through verifyImageSignature(): it streams the image through the
+// ESP32 Update API (no fixed length up front) while hashing it, then checks
+// the detached .sig uploaded alongside before finalizing.
 class FirmwareUpdateService
 {
 public:
@@ -73,6 +73,12 @@ public:
     // ownership exclusive with the BLE transport.
     bool beginWebUpdate();
     void abandonWebUpdate();
+
+    // ECDSA-P256 check of a raw r||s signature over an image's SHA-256
+    // digest against the embedded release public key. Shared by both
+    // transports; heavy enough that it must run on the main task.
+    static bool verifyImageSignature(
+        const uint8_t digest[32], const uint8_t signature[SIGNATURE_SIZE]);
 
     State state() const { return state_.load(); }
     Error error() const { return error_.load(); }

@@ -202,14 +202,13 @@ confirmed against the physical wiring.
    "alarm active" flag. Web Dashboard only, no BLE surface -- it needs the
    home Wi-Fi station with real internet access regardless, same reasoning
    as MQTT.
-2. [x] Only HTTPS servers are supported, with certificate validation
-   disabled (`WiFiClientSecure::setInsecure()`) rather than a full CA
-   bundle: `HTTPClient`+`WiFiClientSecure` alone cost ~146 KB flash (83% ->
-   91% of the OTA partition on a 4 MB board), and a certificate bundle would
-   add meaningfully more on top of that. Accepted trade-off, confirmed with
-   Marco before implementing: a network attacker could theoretically spoof
-   or read a low-sensitivity "battery alarm" push, but that's a low
-   real-world risk for what it buys back in flash headroom.
+2. [x] Only HTTPS servers are supported. Originally shipped with certificate
+   validation disabled (`WiFiClientSecure::setInsecure()`) to avoid a full
+   CA bundle on top of the ~146 KB `HTTPClient`+`WiFiClientSecure` already
+   cost. Revised in 0.5.19: the single ISRG Root X1 (Let's Encrypt) root is
+   pinned instead (`NtfyRootCa.h`, ~2 KB), which covers ntfy.sh and any
+   self-hosted server with a Let's Encrypt certificate, so the HTTPS-only
+   rule now actually authenticates the server.
 3. [x] Each notification is a blocking HTTPS POST bounded by
    `Config::NTFY_HTTP_TIMEOUT_MS`, not deferred to the main loop the way OTA
    signature verification is. This is a deliberately different call than

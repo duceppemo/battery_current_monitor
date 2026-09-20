@@ -14,6 +14,7 @@ void DebouncedButton::begin()
     shortPressEvent_ = false;
     longPressEvent_ = false;
     longPressFired_ = false;
+    pressActive_ = false;
 }
 
 void DebouncedButton::update(uint32_t nowMs)
@@ -32,12 +33,14 @@ void DebouncedButton::update(uint32_t nowMs)
         if (stableState_ == LOW) {
             pressedAtMs_ = nowMs;
             longPressFired_ = false;
-        } else if (!longPressFired_) {
-            shortPressEvent_ = true;
+            pressActive_ = true;
+        } else {
+            if (pressActive_ && !longPressFired_) shortPressEvent_ = true;
+            pressActive_ = false;
         }
     }
 
-    if (stableState_ == LOW && !longPressFired_ && longPressMs_ != 0 &&
+    if (pressActive_ && stableState_ == LOW && !longPressFired_ && longPressMs_ != 0 &&
         (nowMs - pressedAtMs_) >= longPressMs_) {
         longPressEvent_ = true;
         longPressFired_ = true;

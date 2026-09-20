@@ -43,7 +43,12 @@ constexpr uint8_t LOAD_PROTECTION_MANUAL = 4;
 class LoadProtectionMonitor
 {
 public:
-    void begin();
+    // Restores a persisted automatic trip (relay stays open) when the
+    // feature is enabled; otherwise engages the relay. The caller must
+    // then evaluate its first sample with update() before the main loop
+    // starts, so a still-breached threshold trips immediately rather than
+    // one measurement interval later.
+    void begin(const LoadProtectionConfig& settings);
     void update(
         const LoadProtectionConfig& settings,
         const Telemetry& telemetry,
@@ -83,6 +88,8 @@ public:
 
 private:
     void setRelay(bool engaged);
+    // Automatic trips survive a reboot; manual test disconnects do not.
+    void persistTripState();
 
     bool relayEngaged_ = true;
     bool tripped_ = false;

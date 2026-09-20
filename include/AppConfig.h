@@ -6,7 +6,7 @@ namespace Config
 {
     // Keep the release version in one place. The preprocessor string literal is
     // also embedded in OTA images for the dashboard's selected-file check.
-#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.18"
+#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.19"
     constexpr char FIRMWARE_VERSION[] = BATTERY_MONITOR_FIRMWARE_VERSION;
     // Deliberately retained in the application image so the Web Dashboard can
     // identify a selected OTA .bin before it is written to the inactive slot.
@@ -59,6 +59,12 @@ namespace Config
     constexpr float SOC_TAIL_CURRENT_CAPACITY_FRACTION = 1.0f / 50.0f; // C/50.
     constexpr float SOC_CURRENT_SMOOTHING_ALPHA = 0.1f;
     constexpr uint32_t SOC_PERSIST_INTERVAL_MS = 60000;
+    // A full-charge sync only counts as a cycle (and the automatic sync
+    // only re-arms) once at least this much capacity has been used since
+    // the previous sync. A battery sitting on a float charger otherwise
+    // meets the full-charge condition continuously and would log a new
+    // "cycle" every SOC_FULL_CHARGE_SUSTAIN_MS.
+    constexpr float SOC_CYCLE_MIN_DEPTH_PERCENT = 5.0f;
 
     // Session Ah/Wh persistence is opt-in (see EnergyPersistenceConfig); the
     // same "periodic, not every sample" bound-flash-writes reasoning as the
@@ -71,6 +77,12 @@ namespace Config
     // live dashboard, so a slower interval keeps broker/network load low.
     constexpr uint32_t MQTT_RECONNECT_INTERVAL_MS = 15000;
     constexpr uint32_t MQTT_PUBLISH_INTERVAL_MS = 10000;
+    // PubSubClient's connect() is synchronous, so these bound how long one
+    // attempt against an unreachable/slow broker can stall the main loop:
+    // the TCP connect (WiFiClient, whole seconds) and the CONNACK wait
+    // (PubSubClient's socket timeout, whole seconds; its default is 15 s).
+    constexpr uint16_t MQTT_CONNECT_TIMEOUT_S = 1;
+    constexpr uint16_t MQTT_SOCKET_TIMEOUT_S = 2;
 
     // ntfy push notifications are entirely optional; a POST only happens on
     // an alarm's rising edge (see NtfyNotifier), so this timeout only bounds
@@ -78,7 +90,7 @@ namespace Config
     // steady-state loop timing.
     constexpr uint16_t NTFY_HTTP_TIMEOUT_MS = 4000;
 
-    // Load-protection relay control output, e.g. an InkBird SSR-25 DA. The
+    // Load-protection relay control output driving a DC-DC SSR. A typical
     // SSR's DC control input wants 3-32 V; a bare 3.3 V GPIO is at the low
     // end of that range, so drive it through an NPN/MOSFET stage rather than
     // straight off the pin. HIGH = load connected, LOW = load disconnected.

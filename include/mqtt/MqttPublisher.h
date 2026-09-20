@@ -32,10 +32,12 @@ private:
 };
 
 /// Publishes telemetry to an MQTT broker with Home Assistant MQTT discovery,
-/// entirely optional and no-op unless a broker is configured. Never blocks
-/// measurement polling: connection attempts and publishes are both
+/// entirely optional and no-op unless a broker is configured. Publishes are
 /// interval-gated non-blocking calls driven from the application loop, same
-/// as the Web/BLE transports.
+/// as the Web/BLE transports. PubSubClient's connect() is synchronous, so
+/// connection attempts are only made while the Wi-Fi station is up and are
+/// bounded by Config::MQTT_CONNECT_TIMEOUT_S / MQTT_SOCKET_TIMEOUT_S; an
+/// unreachable broker costs at most that stall once per reconnect interval.
 class MqttPublisher
 {
 public:

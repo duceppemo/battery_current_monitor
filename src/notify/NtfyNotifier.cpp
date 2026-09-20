@@ -6,7 +6,10 @@
 #include <cmath>
 #include <cstring>
 
+#include <WiFi.h>
+
 #include "AppConfig.h"
+#include "notify/NtfyRootCa.h"
 
 namespace { constexpr char NS[] = "bm_ntfy"; constexpr char KEY[] = "settings"; }
 
@@ -54,6 +57,11 @@ void NtfyNotifier::update(
     const DeviceAlarmSettings& thresholds,
     const DeviceAlarmState& alarmState)
 {
+    // No station link means the POST could only time out. Leaving the
+    // edge tracker untouched defers an alarm that is still active to the
+    // moment the link returns, instead of losing it.
+    if (settings.enabled && WiFi.status() != WL_CONNECTED) return;
+
     const uint8_t newlyActive = alarmState.activeFlags & static_cast<uint8_t>(~lastActiveFlags_);
     lastActiveFlags_ = alarmState.activeFlags;
 
@@ -96,7 +104,9 @@ void NtfyNotifier::notify(const NtfyConfig& settings, const char* title, const c
     url += settings.topic;
 
     WiFiClientSecure client;
-    client.setInsecure();
+    // setInsecure() would make the HTTPS-only rule cosmetic: any box on the
+    // path could answer as ntfy.sh and read the alarm text.
+    client.setCACert(NTFY_ROOT_CA_PEM);
     HTTPClient https;
     https.setTimeout(Config::NTFY_HTTP_TIMEOUT_MS);
     if (!https.begin(client, url)) {

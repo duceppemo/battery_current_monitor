@@ -23,7 +23,8 @@ route. The release workflow publishes the OTA asset as
    keeps that successful status available for about two seconds so the app can
    show a conclusive result.
 2. **Web Dashboard (recovery/fallback):** join the `BatteryMonitor` AP, open
-   `http://192.168.4.1`, choose the downloaded OTA `.bin`, and upload it.
+   `http://192.168.4.1`, choose the downloaded OTA `.bin` **and its matching
+   `.sig`** (firmware 0.5.19+ refuses an upload without one), and upload.
 3. **USB/serial (initial provisioning or recovery):** use PlatformIO upload
    with a wired board. A changed partition layout may require an erase first.
 
@@ -43,10 +44,12 @@ secret, used solely by the release workflow to sign each published `.bin` as
 reachable over BLE can no longer push an arbitrary image through that path,
 only one signed by the project's release key.
 
-The Web Dashboard upload path is intentionally unaffected: it stays
-CRC/format-checked only, matching its role as a secondary/recovery path that
-already requires reaching the recovery AP or home network. Install assets
-only from the project's GitHub Releases either way.
+As of firmware 0.5.19 the Web Dashboard upload path applies the same rule:
+the image is hashed as it streams into the inactive slot and the detached
+`.sig` uploaded alongside it must verify before the slot is marked bootable.
+Reaching the recovery AP or home network is no longer enough on its own to
+install an arbitrary image. Install assets only from the project's GitHub
+Releases either way.
 
 Signature verification runs on the main loop rather than inside the BLE GATT
 write callback: mbedTLS's ECDSA math is too stack-heavy for the Bluetooth

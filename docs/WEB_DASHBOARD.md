@@ -51,8 +51,18 @@ the version detected in a selected OTA image before upload, and can check
 GitHub for a newer release (needs the *browser's* device to have internet
 access, independent of the monitor's own connectivity) with a direct
 download link to the right `.bin` asset. Browsers don't allow a page to
-install a downloaded file automatically, so installing it is still the same
-manual "select file, then upload" step as before.
+install a downloaded file automatically, so installing it is still a
+manual step: select the `.bin` and its matching `.sig` from the same
+release, then upload. The monitor verifies the signature before it marks
+the new image bootable and rejects an upload without one.
+
+Every state-changing endpoint (`POST /api/...`) requires the request header
+`X-Requested-With: BatteryMonitor`; the dashboard's own JavaScript sends it.
+This is a cross-site request forgery guard: a browser will only attach a
+custom header to a same-origin script request, so a form or script on any
+other page the operator visits cannot drive the monitor. Scripts calling
+the REST API directly (curl, Home Assistant, etc.) must add the header;
+`GET /api/telemetry` needs nothing.
 
 ## MQTT / Home Assistant
 
@@ -84,8 +94,11 @@ moment voltage or state of charge drops below its configured threshold,
 whichever happens first — SoC is only checked once the fuel gauge has been
 synced to full at least once. The trip **latches**: it never reconnects on
 its own, even if the reading recovers, so it cannot chatter if a value hovers
-right at the threshold under load. A "Reconnect load" control clears it, but
-is refused if the trigger condition is still active. Separate "Test: force
+right at the threshold under load. An automatic trip also survives a power
+cycle: the relay comes up open on the next boot and the first sample is
+evaluated before the radios start, so a deeply discharged battery cannot be
+reconnected by a brownout-and-reboot loop. A "Reconnect load" control clears
+it, but is refused if the trigger condition is still active. Separate "Test: force
 connect" / "Test: force disconnect" controls bypass all of this to bench-test
 the relay wiring directly, whether or not protection is enabled, from either
 transport. The BLE side of this feature (dashboard page and control commands)

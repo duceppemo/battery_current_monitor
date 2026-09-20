@@ -177,6 +177,12 @@ private:
     );
     void publishFirmwareUpdateStatus(bool notify);
     void publishControlStatus(bool notify);
+    // Payload-carrying consumers read their pending* fields while the slot
+    // still holds `command` (only the main loop ever clears it, so the
+    // fields cannot change underneath them) and release it afterwards.
+    // Releasing first would let the next BLE write overwrite the payload
+    // mid-copy.
+    bool commandPending(PendingCommand command) const;
     bool consumeCommand(PendingCommand command, uint16_t& requestId);
 
     ServerCallbacks callbacks_;

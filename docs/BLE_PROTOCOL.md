@@ -156,7 +156,10 @@ a control command:
 Its fixed six-byte packet is: protocol version (`1`), command byte, `u16`
 request ID, result (`0` idle, `1` applied, `2` rejected because another command
 is pending, `3` failed to persist), and one reserved byte. Older clients may
-omit the request ID and receive status with ID zero.
+omit the request ID and receive status with ID zero. A write must be exactly
+the command's payload length or that length plus the two ID bytes; any other
+length is ignored (firmware 0.5.19+), so a request ID is never read from
+inside a payload.
 
 ## Device Information
 

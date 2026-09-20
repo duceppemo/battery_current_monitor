@@ -21,6 +21,9 @@ private:
     int stableState_ = HIGH;
     uint32_t lastRawChangeMs_ = 0;
     uint32_t pressedAtMs_ = 0;
+    // Set only on an observed release->press edge, so a button already held
+    // at boot fires neither a short nor a long press until released first.
+    bool pressActive_ = false;
     bool shortPressEvent_ = false;
     bool longPressEvent_ = false;
     bool longPressFired_ = false;

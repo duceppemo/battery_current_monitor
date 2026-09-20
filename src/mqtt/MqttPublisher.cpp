@@ -107,7 +107,22 @@ void MqttPublisher::update(
         return;
     }
 
+    // The recovery AP has no route to a broker, and a TCP connect with no
+    // station link can only time out -- exactly the stall to avoid.
+    if (WiFi.status() != WL_CONNECTED) {
+        if (client_.connected()) client_.disconnect();
+        discoveryPublished_ = false;
+        return;
+    }
+
     ensureDeviceId();
+    // A broker change while connected must drop the old session; setServer()
+    // alone only affects the next connect.
+    if (client_.connected() &&
+        (strcmp(lastHost_, settings.host) != 0 || lastPort_ != settings.port)) {
+        client_.disconnect();
+        discoveryPublished_ = false;
+    }
     client_.setServer(settings.host, settings.port);
     client_.loop();
 
@@ -137,6 +152,11 @@ void MqttPublisher::connectIfDue(const MqttBrokerSettings& settings, uint32_t no
 
     const char* user = settings.username[0] != '\0' ? settings.username : nullptr;
     const char* pass = settings.password[0] != '\0' ? settings.password : nullptr;
+    // Both take whole seconds. WiFiClient's default TCP connect timeout is
+    // 3 s and PubSubClient's CONNACK wait is 15 s; either would stall the
+    // measurement loop past the energy-integration gap limit.
+    wifiClient_.setTimeout(Config::MQTT_CONNECT_TIMEOUT_S);
+    client_.setSocketTimeout(Config::MQTT_SOCKET_TIMEOUT_S);
     const bool connected = client_.connect(
         deviceId_.c_str(), user, pass,
         availabilityTopic_.c_str(), 0, true, "offline");

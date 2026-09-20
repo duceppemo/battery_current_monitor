@@ -109,7 +109,12 @@ must survive reboots to be a useful fuel gauge, so it always persists its
 running state to its own NVS namespace periodically (not on
 every sample, to bound flash writes) and has no notion of "correct" SoC until
 a full-charge sync happens — automatically (sustained voltage at or above the
-charged voltage with a tapering current) or manually from Web/BLE. It also
+charged voltage with a current whose *magnitude* has tapered below C/50) or
+manually from Web/BLE. The automatic sync re-arms only after at least
+`Config::SOC_CYCLE_MIN_DEPTH_PERCENT` of capacity has been used since the
+last sync, and a sync from shallower than that counts no cycle, so a battery
+held on a float charger neither re-syncs every few minutes nor inflates its
+cycle count. It also
 tracks deepest-discharge, full-charge-cycle-count and average-discharge-depth
 history in the same persisted state, updated continuously (deepest discharge)
 or at each full-charge sync (cycle count and average depth) and clearable
@@ -171,8 +176,10 @@ flag), the same shape and reasoning as `MqttSettings`: Web Dashboard only, no
 BLE control, meaningless without the home Wi-Fi station and real internet
 access. `NtfyNotifier` is edge-triggered off `AlarmMonitor::state()`, not
 interval-gated -- it tracks the previously-seen `activeFlags` bitmask and
-POSTs a push notification (via `HTTPClient`/`WiFiClientSecure`, certificate
-validation intentionally disabled) only for bits that just transitioned from
+POSTs a push notification (via `HTTPClient`/`WiFiClientSecure`, verified
+against the single pinned ISRG Root X1 / Let's Encrypt CA in
+`NtfyRootCa.h` -- so a self-hosted server needs a Let's Encrypt
+certificate) only for bits that just transitioned from
 clear to active, with a human-readable message specific to that alarm type
 built from the live `Telemetry` and `DeviceAlarmSettings` thresholds. This
 keeps it silent while a condition remains continuously active and fires
@@ -193,12 +200,15 @@ disabled profile as a complete no-op — the relay GPIO stays permanently
 "connected" — so an unreviewed default threshold can never disconnect a load
 nobody asked to protect; enabling it and setting both thresholds happen in
 the same Web Dashboard save. When enabled, `LoadProtectionMonitor::update()`
-(called once per fresh `Telemetry` sample, immediately after
+(called once per fresh `Telemetry` sample -- including the very first one
+taken in `begin()`, before the radios start -- immediately after
 `StateOfChargeEstimator::update()`, from which it reads SoC) opens the relay
 the moment voltage or SoC crosses its threshold and **latches** — unlike
 `AlarmMonitor`, which just reports a live flag every sample, this holds the
 disconnected state even if the reading recovers on its own, so a value
-hovering at the threshold under load cannot chatter the relay. Only
+hovering at the threshold under load cannot chatter the relay. An automatic
+trip is persisted to NVS and restored by `begin()` (relay stays open across
+a reboot); a manual test disconnect is not. Only
 `reconnect()` clears the latch, and only if the triggering condition is no
 longer active (`evaluateBreach()` — a static, side-effect-free check reused
 by both the live "would a reconnect succeed" status in the dashboard JSON and

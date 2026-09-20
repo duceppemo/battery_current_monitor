@@ -43,7 +43,7 @@ public:
 
     bool known() const { return synced_; }
     float percent(const BatteryProfileSettings& profile) const;
-    float remainingAh() const { return remainingAh_; }
+    float remainingAh() const { return static_cast<float>(remainingAh_); }
     bool hasTimeToEmpty() const;
     uint32_t timeToEmptySeconds() const;
 
@@ -60,11 +60,17 @@ private:
 
     Telemetry previous_;
     bool hasPrevious_ = false;
-    float remainingAh_ = 0.0f;
+    // double: a float loses sub-mAh increments once the total nears the
+    // hundreds of Ah, so a large bank at low current would stop counting.
+    double remainingAh_ = 0.0;
     bool synced_ = false;
     float averageCurrentA_ = NAN;
     uint32_t fullChargeConditionStartMs_ = 0;
     bool fullChargeConditionActive_ = false;
+    // Cleared by every full-charge sync; set again only once the battery
+    // has been discharged by SOC_CYCLE_MIN_DEPTH_PERCENT (or was never
+    // synced), so a battery held at float does not re-sync endlessly.
+    bool autoSyncArmed_ = true;
     uint32_t lastPersistMs_ = 0;
     bool dirty_ = false;
     float deepestDischargePercent_ = 0.0f;

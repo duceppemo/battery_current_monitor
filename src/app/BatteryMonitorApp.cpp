@@ -170,7 +170,7 @@ void BatteryMonitorApp::begin()
     ntfySettings_.begin();
     deviceNameSettings_.begin();
     loadProtectionSettings_.begin();
-    loadProtectionMonitor_.begin();
+    loadProtectionMonitor_.begin(loadProtectionSettings_.current());
     energyPersistenceSettings_.begin();
     energy_.begin(energyPersistenceSettings_.current());
     sensor_.setCalibration(calibration_.current());
@@ -197,6 +197,11 @@ void BatteryMonitorApp::begin()
     alarmMonitor_.update(initial, alarms_.current());
     energy_.update(initial, energyPersistenceSettings_.current());
     stateOfCharge_.update(initial, batteryProfile_.current(), initial.sampledAtMs);
+    // Evaluate protection on the very first sample so a breached threshold
+    // trips before the radios come up, not one measurement interval later.
+    loadProtectionMonitor_.update(
+        loadProtectionSettings_.current(), initial, stateOfCharge_, batteryProfile_.current()
+    );
 
     ble_.begin(firmwareUpdate_);
     bootCheckpoint = 7;
