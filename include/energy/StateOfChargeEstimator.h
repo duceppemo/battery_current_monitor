@@ -73,6 +73,11 @@ private:
     bool autoSyncArmed_ = true;
     uint32_t lastPersistMs_ = 0;
     bool dirty_ = false;
+    // remainingAh_ as of the last successful persist. update() only marks
+    // the state dirty once remainingAh_ has moved from this by at least
+    // Config::SOC_PERSIST_MIN_DELTA_PERCENT of capacity -- see that
+    // constant's comment for why this matters for flash wear.
+    double lastPersistedRemainingAh_ = 0.0;
     float deepestDischargePercent_ = 0.0f;
     uint32_t fullChargeCycles_ = 0;
     float dischargeDepthSumPercent_ = 0.0f;

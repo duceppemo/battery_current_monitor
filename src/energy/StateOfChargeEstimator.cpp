@@ -64,6 +64,7 @@ void StateOfChargeEstimator::begin()
     if (!p.begin(STATE_NS, true)) return;
     if (p.getUInt(STATE_SCHEMA_KEY, 0) == STATE_SCHEMA_VERSION) {
         remainingAh_ = p.getFloat(STATE_REMAINING_KEY, 0.0f);
+        lastPersistedRemainingAh_ = remainingAh_;
         // Persisted state has no "used since last sync" record; treat a
         // restored gauge as armed. The worst case is one extra, harmless
         // sync (no cycle is counted below the depth threshold).
@@ -110,7 +111,17 @@ void StateOfChargeEstimator::update(
     const double clampedCapacity = profile.capacityAh > 0.0f ? profile.capacityAh : 0.0;
     const double updated = remainingAh_ - dischargedAh;
     remainingAh_ = updated < 0.0 ? 0.0 : (updated > clampedCapacity ? clampedCapacity : updated);
-    dirty_ = true;
+    // Gate on moved capacity, not on "a sample happened": current is
+    // essentially never exactly zero twice in a row, so an unconditional
+    // dirty flag here would write to flash on every tick the interval
+    // allows, all day, for as long as the monitor is powered.
+    const double minPersistDeltaAh = profile.capacityAh > 0.0f
+        ? static_cast<double>(profile.capacityAh) *
+              (static_cast<double>(Config::SOC_PERSIST_MIN_DELTA_PERCENT) / 100.0)
+        : 0.0;
+    if (std::fabs(remainingAh_ - lastPersistedRemainingAh_) >= minPersistDeltaAh) {
+        dirty_ = true;
+    }
 
     averageCurrentA_ = std::isnan(averageCurrentA_)
         ? sample.current
@@ -238,6 +249,7 @@ void StateOfChargeEstimator::persistIfDue(uint32_t nowMs, bool force)
     if (saved) {
         lastPersistMs_ = nowMs;
         dirty_ = false;
+        lastPersistedRemainingAh_ = remainingAh_;
     }
 }
 

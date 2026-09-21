@@ -85,8 +85,12 @@ default, matching the meaning "session" has had since this project's
 baseline. `EnergyPersistenceSettings` owns one validated NVS flag (disabled
 by default, analogous to the other `*Settings` types) that opts into
 surviving a reboot instead. When enabled, `EnergyAccumulator` persists its
-own running totals to a separate NVS namespace on the same periodic,
-not-every-sample cadence as `StateOfChargeEstimator`, using the same
+own running totals to a separate NVS namespace on the same
+interval-plus-moved-enough cadence as `StateOfChargeEstimator` (see
+`Config::ENERGY_PERSIST_MIN_DELTA_AH`) -- a device left running
+continuously has current flowing on essentially every sample, so gating
+on the timer alone would still write to flash on almost every tick it
+allows. It uses the same
 schema-invalidate-then-rewrite-then-revalidate write order so a power loss
 mid-write cannot leave a blob that still reads as schema-valid. `reset()`
 force-persists immediately when enabled, rather than waiting for the next
@@ -106,8 +110,13 @@ coulomb-counts remaining amp-hours against that profile — unlike
 `EnergyAccumulator`'s per-power-on-session Ah/Wh (which resets every boot
 unless the operator has explicitly opted into persistence; see below), this
 must survive reboots to be a useful fuel gauge, so it always persists its
-running state to its own NVS namespace periodically (not on
-every sample, to bound flash writes) and has no notion of "correct" SoC until
+running state to its own NVS namespace once both
+`Config::SOC_PERSIST_INTERVAL_MS` has elapsed and remaining amp-hours have
+moved by at least `Config::SOC_PERSIST_MIN_DELTA_PERCENT` of capacity since
+the last save -- the delta gate matters because current is essentially
+never exactly the same across two samples, so a timer alone would still
+write on almost every tick for as long as the monitor stays powered -- and
+has no notion of "correct" SoC until
 a full-charge sync happens — automatically (sustained voltage at or above the
 charged voltage with a current whose *magnitude* has tapered below C/50) or
 manually from Web/BLE. The automatic sync re-arms only after at least

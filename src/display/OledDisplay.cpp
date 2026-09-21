@@ -50,7 +50,7 @@ void OledDisplay::showStartup(const char* firmwareVersion)
     oled_.setFont(u8g2_font_6x12_tf);
 
     constexpr char TITLE[] = "Battery Monitor";
-    constexpr char REVISION_AND_RATING[] = "Rev. A | 100A Kelvin shunt";
+    constexpr char REVISION_AND_RATING[] = "Rev. A | 100 A shunt";
     constexpr char HARDWARE[] = "INA228 + SSD1309";
     constexpr char STARTING[] = "BLE + WiFi starting";
     constexpr int DISPLAY_WIDTH = 128;

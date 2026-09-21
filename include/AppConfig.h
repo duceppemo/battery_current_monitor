@@ -6,7 +6,7 @@ namespace Config
 {
     // Keep the release version in one place. The preprocessor string literal is
     // also embedded in OTA images for the dashboard's selected-file check.
-#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.19"
+#define BATTERY_MONITOR_FIRMWARE_VERSION "0.5.20"
     constexpr char FIRMWARE_VERSION[] = BATTERY_MONITOR_FIRMWARE_VERSION;
     // Deliberately retained in the application image so the Web Dashboard can
     // identify a selected OTA .bin before it is written to the inactive slot.
@@ -58,7 +58,14 @@ namespace Config
     constexpr uint32_t SOC_FULL_CHARGE_SUSTAIN_MS = 180000; // 3 minutes.
     constexpr float SOC_TAIL_CURRENT_CAPACITY_FRACTION = 1.0f / 50.0f; // C/50.
     constexpr float SOC_CURRENT_SMOOTHING_ALPHA = 0.1f;
-    constexpr uint32_t SOC_PERSIST_INTERVAL_MS = 60000;
+    // A persist only happens once both this much time has passed AND
+    // remainingAh_ has moved by SOC_PERSIST_MIN_DELTA_PERCENT of capacity
+    // since the last one -- current is essentially never exactly the same
+    // across two samples, so without the delta gate a device left running
+    // continuously would write to flash on virtually every tick this
+    // interval allows, which is real wear over months of uptime.
+    constexpr uint32_t SOC_PERSIST_INTERVAL_MS = 300000; // 5 minutes.
+    constexpr float SOC_PERSIST_MIN_DELTA_PERCENT = 0.1f;
     // A full-charge sync only counts as a cycle (and the automatic sync
     // only re-arms) once at least this much capacity has been used since
     // the previous sync. A battery sitting on a float charger otherwise
@@ -67,9 +74,11 @@ namespace Config
     constexpr float SOC_CYCLE_MIN_DEPTH_PERCENT = 5.0f;
 
     // Session Ah/Wh persistence is opt-in (see EnergyPersistenceConfig); the
-    // same "periodic, not every sample" bound-flash-writes reasoning as the
-    // fuel gauge above applies here too.
-    constexpr uint32_t ENERGY_PERSIST_INTERVAL_MS = 60000;
+    // same interval-plus-delta flash-wear reasoning as the fuel gauge above
+    // applies here too, gated on absolute Ah moved rather than percent of
+    // capacity since this counter has no capacity to scale against.
+    constexpr uint32_t ENERGY_PERSIST_INTERVAL_MS = 300000; // 5 minutes.
+    constexpr float ENERGY_PERSIST_MIN_DELTA_AH = 0.01f;
 
     // MQTT is entirely optional; these only matter once a broker is
     // configured. Reconnects back off on a fixed interval rather than

@@ -211,8 +211,7 @@ void WebDashboard::begin(
         if (type != WStype_CONNECTED) return;
         // Send an immediate snapshot so a newly connected client doesn't
         // wait up to one broadcast interval for its first update.
-        String json;
-        if (buildTelemetryJson(json)) webSocket_.sendTXT(clientId, json);
+        if (buildTelemetryJson(telemetryJson_)) webSocket_.sendTXT(clientId, telemetryJson_);
     });
 
     running_ = true;
@@ -803,8 +802,9 @@ void WebDashboard::broadcastTelemetryIfDue(uint32_t nowMs)
     if (nowMs - lastWebSocketBroadcastMs_ < Config::MEASUREMENT_INTERVAL_MS) return;
     lastWebSocketBroadcastMs_ = nowMs;
 
-    String json;
-    if (buildTelemetryJson(json)) webSocket_.broadcastTXT(json);
+    // telemetryJson_ is reserve()d once in begin(); reusing it here avoids a
+    // fresh ~1.4 KB allocation twice a second for the life of the device.
+    if (buildTelemetryJson(telemetryJson_)) webSocket_.broadcastTXT(telemetryJson_);
 }
 
 void WebDashboard::handleResetExtrema()

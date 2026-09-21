@@ -87,9 +87,27 @@ void FirmwareUpdateService::start(
     uint32_t expectedCrc32,
     const uint8_t signature[SIGNATURE_SIZE])
 {
+    // The main loop may be inside processPendingVerification() right now,
+    // hashing/verifying with sha256Ctx_ and signature_; resetting those
+    // here (this runs on the BLE task) would corrupt that check mid-flight.
+    // Report busy and let the pending verification finish first.
+    if (state_.load() == State::Verifying) {
+        error_.store(Error::Start);
+        return;
+    }
+
     if (state_.load() == State::Receiving && owner_.load() == Owner::Ble) {
         Update.abort();
         release(Owner::Ble);
+    }
+
+    // Own the writer before touching any per-transfer state, so a START
+    // that loses to an in-progress Web upload leaves that upload's state
+    // untouched.
+    if (!claim(Owner::Ble)) {
+        state_.store(State::Error);
+        error_.store(Error::Start);
+        return;
     }
 
     restartRequested_.store(false);
@@ -103,7 +121,7 @@ void FirmwareUpdateService::start(
     mbedtls_sha256_starts_ret(&sha256Ctx_, 0);
     error_.store(Error::None);
 
-    if (!claim(Owner::Ble) || imageSize == 0 || !Update.begin(imageSize, U_FLASH)) {
+    if (imageSize == 0 || !Update.begin(imageSize, U_FLASH)) {
         release(Owner::Ble);
         state_.store(State::Error);
         error_.store(Error::Start);

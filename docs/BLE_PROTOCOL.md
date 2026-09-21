@@ -215,7 +215,7 @@ the monitor rejects duplicate, missing or out-of-order data frames.
 
 | Command | Frame | Meaning |
 | ---: | --- | --- |
-| `0xA0` | command, `u32` image size, `u32` IEEE CRC-32, 64 bytes ECDSA-P256 signature | Start a new image. The checksum covers the complete raw `.bin` asset; the signature is over that image's SHA-256 digest, raw `r \|\| s` (32 bytes each, big-endian) — not DER — verified against the public key embedded in firmware (firmware 0.5.16+). Get the matching `.sig` asset from the same GitHub Release as the `.bin`. |
+| `0xA0` | command, `u32` image size, `u32` IEEE CRC-32, 64 bytes ECDSA-P256 signature | Start a new image. The checksum covers the complete raw `.bin` asset; the signature is over that image's SHA-256 digest, raw `r \|\| s` (32 bytes each, big-endian) — not DER — verified against the public key embedded in firmware (firmware 0.5.16+). Get the matching `.sig` asset from the same GitHub Release as the `.bin`. A start sent while a previous transfer is still `verifying` is rejected with error `1` (start) without disturbing that verification; wait for it to reach `verified` or `error` first (firmware 0.5.20+). |
 | `0xA1` | command, `u32` offset, 1..N bytes image data | Write one image chunk at exactly the next expected offset. |
 | `0xA2` | command only | Finish. The monitor checks size and CRC-32 immediately, then moves to a `verifying` status while the main loop performs signature and ESP32 image verification (firmware 0.5.16+ defers this off the BLE callback -- see status below), before scheduling a reboot. A bad signature discards the write via `Update.abort()` rather than `Update.end()`, so the previous firmware stays the boot target. |
 | `0xA3` | command only | Abort and discard the inactive-partition image. |

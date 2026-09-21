@@ -110,7 +110,11 @@ JSON and BLE.
    (still open — that's about the per-power-on-session Ah/Wh totals), this
    fuel gauge is deliberately persisted across reboots from the start, since
    an SoC/time-to-go that resets on every power cycle isn't useful; it
-   persists periodically (not every sample) to bound flash writes.
+   persists once both a time interval and a minimum moved-capacity
+   threshold are met (`Config::SOC_PERSIST_INTERVAL_MS`/
+   `SOC_PERSIST_MIN_DELTA_PERCENT`), not on every sample, since current is
+   essentially never exactly the same twice and a timer-only gate would
+   still write on almost every tick a continuously powered monitor allows.
 2. [x] Resync to 100% automatically once voltage stays at or above the
    profile's charged voltage with a tapering (near-zero) current for a
    sustained period, or manually from Web/BLE. Time-to-go only applies while

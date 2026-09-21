@@ -70,4 +70,9 @@ private:
     bool hasPrevious_ = false;
     uint32_t lastPersistMs_ = 0;
     bool dirty_ = false;
+    // running_.netAh as of the last successful persist; update() only
+    // marks the state dirty once it has moved by at least
+    // Config::ENERGY_PERSIST_MIN_DELTA_AH, for the same flash-wear reason
+    // as StateOfChargeEstimator's equivalent field.
+    double lastPersistedNetAh_ = 0.0;
 };

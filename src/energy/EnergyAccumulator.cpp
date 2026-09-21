@@ -1,6 +1,7 @@
 #include "energy/EnergyAccumulator.h"
 
 #include <Preferences.h>
+#include <cmath>
 
 #include "AppConfig.h"
 
@@ -53,6 +54,7 @@ void EnergyAccumulator::begin(const EnergyPersistenceConfig& settings)
         running_.dischargedWh = p.getFloat(STATE_DISCHARGED_WH_KEY, 0.0f);
         running_.chargedAh = p.getFloat(STATE_CHARGED_AH_KEY, 0.0f);
         running_.chargedWh = p.getFloat(STATE_CHARGED_WH_KEY, 0.0f);
+        lastPersistedNetAh_ = running_.netAh;
         publishTotals();
     }
     p.end();
@@ -113,7 +115,12 @@ void EnergyAccumulator::update(const Telemetry& sample, const EnergyPersistenceC
     publishTotals();
 
     previous_ = sample;
-    dirty_ = true;
+    // Same reasoning as StateOfChargeEstimator: gate on Ah actually moved,
+    // not on "a sample happened", or a persistently powered monitor would
+    // write to flash on every tick the interval allows.
+    if (std::fabs(running_.netAh - lastPersistedNetAh_) >= Config::ENERGY_PERSIST_MIN_DELTA_AH) {
+        dirty_ = true;
+    }
     if (settings.enabled) persistIfDue(sample.sampledAtMs, false);
 }
 
@@ -122,6 +129,7 @@ void EnergyAccumulator::reset(const EnergyPersistenceConfig& settings)
     running_ = RunningTotals{};
     totals_ = EnergyTotals{};
     hasPrevious_ = false;
+    lastPersistedNetAh_ = 0.0;
     dirty_ = true;
     // Force-persist immediately (not just mark dirty for the next periodic
     // tick): otherwise a crash between now and the next tick would restore
@@ -154,6 +162,7 @@ void EnergyAccumulator::persistIfDue(uint32_t nowMs, bool force)
     if (saved) {
         lastPersistMs_ = nowMs;
         dirty_ = false;
+        lastPersistedNetAh_ = running_.netAh;
     }
 }
 
